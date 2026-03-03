@@ -191,3 +191,20 @@ table tbody tr:hover { background: #f8fafc; }
 }
 .tab:hover { color: var(--text); }
 .tab.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
+
+/* ── Mobile & Responsive ──────────────────────────────── */
+@media (max-width: 680px) {
+  .page { padding: 1rem 0.875rem; }
+  .page-header { flex-direction: column; align-items: flex-start; }
+
+  /* tables scroll horizontally instead of overflowing the screen */
+  table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* tab bar scrolls horizontally on narrow screens */
+  .tabs { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .tab  { flex-shrink: 0; }
+}
