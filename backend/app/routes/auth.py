@@ -98,9 +98,6 @@ def verify_email(token):
 # ---------------------------------------------------------------------------
 # POST /api/auth/login
 # ---------------------------------------------------------------------------
-MAX_FAILURES   = 15           # consecutive failures before soft-lock
-LOCKOUT_WINDOW = 30           # minutes the window spans
-
 @auth_bp.route("/login", methods=["POST"])
 @limiter.limit("10 per minute")          # per IP — real users never hit this
 @limiter.limit("50 per hour")            # secondary cap
@@ -112,36 +109,14 @@ def login():
     db   = get_db()
     user = db.users.find_one({"email": email})
 
-    if user:
-        # ── Per-user soft lockout check ───────────────────────────────────
-        attempts  = user.get("failed_login_attempts", 0)
-        last_fail = user.get("failed_login_at")
-        window    = datetime.datetime.utcnow() - datetime.timedelta(minutes=LOCKOUT_WINDOW)
-        if attempts >= MAX_FAILURES and last_fail and last_fail > window:
-            return jsonify({
-                "error": "Too many failed attempts. Please reset your password to unlock your account."
-            }), 429
-
     # Generic message to avoid user enumeration.
     # 500 ms delay on failure — negligible for real users, crippling for bots.
     if not user or not check_password_hash(user["password_hash"], password):
         time.sleep(0.5)
-        if user:
-            db.users.update_one(
-                {"_id": user["_id"]},
-                {"$inc": {"failed_login_attempts": 1},
-                 "$set": {"failed_login_at": datetime.datetime.utcnow()}},
-            )
         return jsonify({"error": "Invalid email or password."}), 401
 
     if not user["verified"]:
         return jsonify({"error": "Please verify your email before logging in."}), 403
-
-    # ── Successful login — clear failure counter ──────────────────────────
-    db.users.update_one(
-        {"_id": user["_id"]},
-        {"$unset": {"failed_login_attempts": "", "failed_login_at": ""}},
-    )
 
     # ── Issue JWT ─────────────────────────────────────────────────────────
     expiry_hours = current_app.config["JWT_EXPIRY_HOURS"]
@@ -238,10 +213,8 @@ def reset_password():
         {
             "$set":   {"password_hash": generate_password_hash(password)},
             "$unset": {
-                "reset_token":            "",
-                "reset_token_expiry":     "",
-                "failed_login_attempts":  "",  # clear lockout on password change
-                "failed_login_at":        "",
+                "reset_token":        "",
+                "reset_token_expiry": "",
             },
         },
     )
