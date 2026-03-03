@@ -1,0 +1,40 @@
+services:
+  # ── Flask API ────────────────────────────────────────────────────────────
+  - type: web
+    name: mdh1056-library-backend
+    runtime: docker
+    dockerfilePath: backend/Dockerfile
+    dockerContext: backend
+    envVars:
+      - key: MONGO_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: ALLOWED_EMAIL_DOMAIN
+        value: slu.edu
+      - key: ADMIN_EMAILS
+        sync: false
+      - key: MAIL_SERVER
+        value: smtp.gmail.com
+      - key: MAIL_PORT
+        value: "587"
+      - key: MAIL_USERNAME
+        sync: false
+      - key: MAIL_PASSWORD
+        sync: false
+      - key: MAIL_FROM
+        sync: false
+      - key: FRONTEND_URL
+        sync: false # set to your frontend service URL after first deploy
+      - key: CORS_ORIGIN
+        sync: false # same as FRONTEND_URL
+
+  # ── React + Vite (served by nginx) ───────────────────────────────────────
+  - type: web
+    name: mdh1056-library-frontend
+    runtime: docker
+    dockerfilePath: frontend/Dockerfile
+    dockerContext: frontend
+    buildArgs:
+      - key: VITE_API_URL
+        sync: false # set to your backend service URL after first deploy
