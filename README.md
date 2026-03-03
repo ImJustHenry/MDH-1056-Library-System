@@ -1,6 +1,8 @@
 # Library System
 
-A full-stack library management system.
+A full-stack library management system built for **Professor Sahin Ozdemir** as part of the MDH-1056 course at Saint Louis University.
+
+**Live Demo:** https://mdh1056-library-frontend.onrender.com
 
 ## Tech Stack
 
@@ -89,15 +91,16 @@ npm run dev
 - [x] Step 1 — Project structure & config
 - [x] Step 2 — MongoDB Atlas setup
 - [x] Step 3 — Custom JWT auth (@slu.edu email verification)
-- [ ] Step 4 — MongoDB indexes & seed data
-- [ ] Step 5 — Book routes
-- [ ] Step 6 — Checkout routes
-- [ ] Step 7 — Log routes
-- [ ] Step 8 — Dashboard route
-- [ ] Step 9 — React app init
-- [ ] Step 10 — Auth flow in React (login, register, verify)
-- [ ] Step 11 — Book catalog page
-- [ ] Step 12 — Checkout flow
+- [x] Step 4 — MongoDB indexes & seed data
+- [x] Step 5 — Book routes
+- [x] Step 6 — Checkout routes
+- [x] Step 7 — Log routes
+- [x] Step 8 — Dashboard route
+- [x] Step 9 — React app init
+- [x] Step 10 — Auth flow in React (login, register, verify)
+- [x] Step 11 — Book catalog page
+- [x] Step 12 — Checkout flow
+- [x] Step 13 — Deployed to Render
 - [ ] Step 13 — Admin panel
 - [ ] Step 14 — Dashboard page
 
