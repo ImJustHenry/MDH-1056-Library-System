@@ -18,7 +18,11 @@ export default function LoginPage() {
       const loggedInUser = await login(email, password);
       navigate(loggedInUser.role === "admin" ? "/dashboard" : "/books", { replace: true });
     } catch (err) {
-      setError(err.response?.data?.error || "Invalid email or password.");
+      if (err.response?.status === 429) {
+        setError("Too many login attempts. Please wait a minute and try again.");
+      } else {
+        setError(err.response?.data?.error || "Invalid email or password.");
+      }
     } finally {
       setLoading(false);
     }

@@ -1,5 +1,6 @@
 import secrets
 import datetime
+import time
 
 import jwt
 from bson import ObjectId
@@ -8,6 +9,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 from ..db import get_db
 from ..email_utils import send_verification_email
+from .. import limiter
 
 auth_bp = Blueprint("auth", __name__)
 
@@ -97,6 +99,8 @@ def verify_email(token):
 # POST /api/auth/login
 # ---------------------------------------------------------------------------
 @auth_bp.route("/login", methods=["POST"])
+@limiter.limit("10 per minute")          # per IP — real users never hit this
+@limiter.limit("50 per hour")            # secondary cap
 def login():
     data = request.get_json(silent=True) or {}
     email    = data.get("email", "").lower().strip()
@@ -105,8 +109,10 @@ def login():
     db = get_db()
     user = db.users.find_one({"email": email})
 
-    # Generic message to avoid user enumeration
+    # Generic message to avoid user enumeration.
+    # 500 ms delay on failure — negligible for real users, crippling for bots.
     if not user or not check_password_hash(user["password_hash"], password):
+        time.sleep(0.5)
         return jsonify({"error": "Invalid email or password."}), 401
 
     if not user["verified"]:
@@ -141,6 +147,7 @@ def login():
 # Always returns 200 (avoids user enumeration)
 # ---------------------------------------------------------------------------
 @auth_bp.route("/forgot-password", methods=["POST"])
+@limiter.limit("5 per minute")   # prevent email-bombing
 def forgot_password():
     from ..email_utils import send_reset_email
     data  = request.get_json(silent=True) or {}
