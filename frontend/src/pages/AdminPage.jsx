@@ -249,12 +249,12 @@ export default function AdminPage() {
           <table style={styles.table}>
             <thead>
               <tr style={styles.header}>
-                <th>Book</th><th>User</th><th>Checked Out</th><th>Due Date</th>
+                <th>Book</th><th>User</th><th>Checked Out</th>
               </tr>
             </thead>
             <tbody>
               {checkouts.length === 0 && (
-                <tr><td colSpan={4} style={{textAlign:"center",padding:"1rem",color:"#888"}}>
+                <tr><td colSpan={3} style={{textAlign:"center",padding:"1rem",color:"#888"}}>
                   Nothing checked out.
                 </td></tr>
               )}
@@ -263,7 +263,6 @@ export default function AdminPage() {
                   <td>{c.book_title}</td>
                   <td>{c.user_email}</td>
                   <td>{fmt(c.checked_out_at)}</td>
-                  <td>{fmt(c.due_date)}</td>
                 </tr>
               ))}
             </tbody>

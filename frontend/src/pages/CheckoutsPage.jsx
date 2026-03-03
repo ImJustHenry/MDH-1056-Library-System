@@ -61,7 +61,6 @@ export default function CheckoutsPage() {
             <th>Book</th>
             {user.role === "admin" && <th>User</th>}
             <th>Checked Out</th>
-            <th>Due Date</th>
             <th>Returned</th>
             <th>Status</th>
             <th></th>
@@ -69,7 +68,7 @@ export default function CheckoutsPage() {
         </thead>
         <tbody>
           {checkouts.length === 0 && (
-            <tr><td colSpan={7} style={{textAlign:"center",padding:"1rem",color:"#888"}}>
+            <tr><td colSpan={6} style={{textAlign:"center",padding:"1rem",color:"#888"}}>
               No checkouts found.
             </td></tr>
           )}
@@ -78,7 +77,6 @@ export default function CheckoutsPage() {
               <td>{c.book_title}</td>
               {user.role === "admin" && <td style={{fontSize:"0.85rem"}}>{c.user_email}</td>}
               <td>{fmt(c.checked_out_at)}</td>
-              <td>{fmt(c.due_date)}</td>
               <td>{fmt(c.returned_at)}</td>
               <td>
                 <span style={c.status === "active" ? styles.active : styles.returned}>

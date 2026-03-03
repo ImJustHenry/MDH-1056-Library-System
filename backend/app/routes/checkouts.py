@@ -18,7 +18,7 @@ from ..middleware.auth import token_required, admin_required
 
 checkouts_bp = Blueprint("checkouts", __name__)
 
-LOAN_DAYS = 14  # default loan period
+
 
 
 def _serialize(doc: dict) -> dict:
@@ -72,7 +72,6 @@ def _do_checkout(db, book_id_str: str, user_id: str,
         "user_id":        uid,
         "user_email":     user_email,
         "checked_out_at": now,
-        "due_date":       now + datetime.timedelta(days=LOAN_DAYS),
         "returned_at":    None,
         "status":         "active",
     }
