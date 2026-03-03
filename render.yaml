@@ -3,6 +3,7 @@ services:
   - type: web
     name: mdh1056-library-backend
     runtime: docker
+    plan: free
     dockerfilePath: backend/Dockerfile
     dockerContext: backend
     envVars:
@@ -33,8 +34,9 @@ services:
   - type: web
     name: mdh1056-library-frontend
     runtime: docker
+    plan: free
     dockerfilePath: frontend/Dockerfile
     dockerContext: frontend
-    buildArgs:
+    envVars:
       - key: VITE_API_URL
         sync: false # set to your backend service URL after first deploy
