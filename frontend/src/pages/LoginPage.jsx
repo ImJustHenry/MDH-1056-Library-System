@@ -19,7 +19,12 @@ export default function LoginPage() {
       navigate(loggedInUser.role === "admin" ? "/dashboard" : "/books", { replace: true });
     } catch (err) {
       if (err.response?.status === 429) {
-        setError("Too many login attempts. Please wait a minute and try again.");
+        const msg = err.response?.data?.error || "";
+        if (msg.includes("reset your password")) {
+          setError("__lockout__");  // special sentinel — rendered as link below
+        } else {
+          setError("Too many login attempts. Please wait a minute and try again.");
+        }
       } else {
         setError(err.response?.data?.error || "Invalid email or password.");
       }
@@ -39,7 +44,17 @@ export default function LoginPage() {
         <p style={styles.sub}>MDH 1056 Library System - @slu.edu only</p>
 
         {/* Error persists until next attempt */}
-        {error && <div style={styles.error}>{error}</div>}
+        {error === "__lockout__" ? (
+          <div style={styles.error}>
+            Too many failed attempts. Please{" "}
+            <Link to="/forgot-password" style={{ color:"#c00", fontWeight:600 }}>
+              reset your password
+            </Link>{" "}
+            to unlock your account.
+          </div>
+        ) : error ? (
+          <div style={styles.error}>{error}</div>
+        ) : null}
 
         <div>
           <label style={styles.label}>Email</label>
