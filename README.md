@@ -1,6 +1,6 @@
 # Library System
 
-A full-stack library management system built for **Professor Sahin Ozdemir** as part of the MDH-1056 course at Saint Louis University.
+A full-stack library management system built for **Professor Ozdemir** — room 1056 in the McDonnell Douglas Hall (MDH) at Saint Louis University.
 
 **Live Demo:** https://mdh1056-library-frontend.onrender.com
 
