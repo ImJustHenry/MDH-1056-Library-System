@@ -27,5 +27,8 @@ class Config:
     # Frontend URL — used in verification email links
     FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
 
+    # reCAPTCHA v2 — secret key for server-side token verification
+    RECAPTCHA_SECRET = os.getenv("RECAPTCHA_SECRET", "")
+
     # CORS
     CORS_ORIGIN = os.getenv("CORS_ORIGIN", "http://localhost:5173")

@@ -1,23 +1,35 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import ReCAPTCHA from "react-google-recaptcha";
 import { useAuth } from "../context/AuthContext";
+
+const SITE_KEY = "6LeNIH4sAAAAAGDOforW2BRSfdmP5bxN_o88uai6";
 
 export default function LoginPage() {
   const { login } = useAuth();
-  const navigate  = useNavigate();
+  const navigate   = useNavigate();
+  const captchaRef = useRef(null);
 
-  const [email,    setEmail]    = useState("");
-  const [password, setPassword] = useState("");
-  const [error,    setError]    = useState("");
-  const [loading,  setLoading]  = useState(false);
+  const [email,        setEmail]        = useState("");
+  const [password,     setPassword]     = useState("");
+  const [captchaToken, setCaptchaToken] = useState("");
+  const [error,        setError]        = useState("");
+  const [loading,      setLoading]      = useState(false);
 
   const handleSubmit = async () => {
     setError("");
+    if (!captchaToken) {
+      setError("Please complete the CAPTCHA.");
+      return;
+    }
     setLoading(true);
     try {
-      const loggedInUser = await login(email, password);
+      const loggedInUser = await login(email, password, captchaToken);
       navigate(loggedInUser.role === "admin" ? "/dashboard" : "/books", { replace: true });
     } catch (err) {
+      // reset captcha so user must solve it again
+      captchaRef.current?.reset();
+      setCaptchaToken("");
       if (err.response?.status === 429) {
         setError("Too many login attempts. Please wait a minute and try again.");
       } else {
@@ -26,10 +38,6 @@ export default function LoginPage() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleKeyDown = (e) => {
-    if (e.key === "Enter") handleSubmit();
   };
 
   return (
@@ -44,14 +52,21 @@ export default function LoginPage() {
           <label style={styles.label}>Email</label>
           <input style={styles.input} type="email" value={email}
             onChange={e => setEmail(e.target.value)}
-            onKeyDown={handleKeyDown}
             autoComplete="email" />
 
           <label style={styles.label}>Password</label>
           <input style={styles.input} type="password" value={password}
             onChange={e => setPassword(e.target.value)}
-            onKeyDown={handleKeyDown}
             autoComplete="current-password" />
+
+          <div style={{ marginBottom: "1rem" }}>
+            <ReCAPTCHA
+              ref={captchaRef}
+              sitekey={SITE_KEY}
+              onChange={token => setCaptchaToken(token || "")}
+              onExpired={() => setCaptchaToken("")}
+            />
+          </div>
 
           <button style={styles.btn} disabled={loading} onClick={handleSubmit}>
             {loading ? "Signing in…" : "Sign In"}

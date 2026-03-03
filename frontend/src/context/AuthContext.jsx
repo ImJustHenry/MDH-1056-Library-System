@@ -7,8 +7,8 @@ export function AuthProvider({ children }) {
   const [user,    setUser]    = useState(() => JSON.parse(localStorage.getItem("user") || "null"));
   const [loading, setLoading] = useState(false);
 
-  const login = async (email, password) => {
-    const { data } = await api.post("/auth/login", { email, password });
+  const login = async (email, password, captchaToken) => {
+    const { data } = await api.post("/auth/login", { email, password, captchaToken });
     localStorage.setItem("token", data.token);
     localStorage.setItem("user",  JSON.stringify(data.user));
     setUser(data.user);

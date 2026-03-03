@@ -2,6 +2,7 @@ import secrets
 import datetime
 import time
 
+import requests as http_requests
 import jwt
 from bson import ObjectId
 from flask import Blueprint, request, jsonify, current_app
@@ -102,6 +103,23 @@ def login():
     data     = request.get_json(silent=True) or {}
     email    = data.get("email", "").lower().strip()
     password = data.get("password", "")
+
+    # ── reCAPTCHA verification ────────────────────────────────────────────
+    secret = current_app.config.get("RECAPTCHA_SECRET", "")
+    if secret:  # skip in dev if env var not set
+        captcha_token = data.get("captchaToken", "")
+        if not captcha_token:
+            return jsonify({"error": "Please complete the CAPTCHA."}), 400
+        try:
+            result = http_requests.post(
+                "https://www.google.com/recaptcha/api/siteverify",
+                data={"secret": secret, "response": captcha_token},
+                timeout=5,
+            ).json()
+        except Exception:
+            return jsonify({"error": "CAPTCHA check failed. Please try again."}), 503
+        if not result.get("success"):
+            return jsonify({"error": "CAPTCHA verification failed. Please try again."}), 400
 
     db   = get_db()
     user = db.users.find_one({"email": email})
