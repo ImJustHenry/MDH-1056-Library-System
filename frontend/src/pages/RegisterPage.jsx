@@ -37,6 +37,9 @@ export default function RegisterPage() {
         {success && (
           <div style={styles.success}>
             <p>{success}</p>
+            <p style={{fontSize:"0.85rem", marginTop:"0.5rem"}}>
+              ⏱ It may take a few minutes for the email to arrive. Please also check your <strong>Spam / Junk</strong> folder.
+            </p>
             {debugUrl && (
               <p style={{fontSize:"0.85rem"}}>
                 <strong>Dev verify link: </strong>
