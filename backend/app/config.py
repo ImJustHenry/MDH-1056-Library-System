@@ -17,12 +17,9 @@ class Config:
     # Comma-separated list of emails that get the admin role on registration
     ADMIN_EMAILS = [e.strip().lower() for e in os.getenv("ADMIN_EMAILS", "").split(",") if e.strip()]
 
-    # SMTP (for verification emails)
-    MAIL_SERVER   = os.getenv("MAIL_SERVER", "smtp.gmail.com")
-    MAIL_PORT     = int(os.getenv("MAIL_PORT", "587"))
-    MAIL_USERNAME = os.getenv("MAIL_USERNAME")
-    MAIL_PASSWORD = os.getenv("MAIL_PASSWORD")
-    MAIL_FROM     = os.getenv("MAIL_FROM")
+    # SendGrid (transactional email via HTTPS — works on Render free tier)
+    SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY", "")
+    MAIL_FROM        = os.getenv("MAIL_FROM", "")
 
     # Frontend URL — used in verification email links
     FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")

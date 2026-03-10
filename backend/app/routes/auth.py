@@ -1,6 +1,7 @@
 import secrets
 import datetime
 import time
+import threading
 
 import requests as http_requests
 import jwt
@@ -54,22 +55,15 @@ def register():
     }
     db.users.insert_one(user_doc)
 
-    # ── Send verification email ───────────────────────────────────────────
-    try:
-        send_verification_email(email, verification_token)
-    except Exception as exc:
-        current_app.logger.error("Email send failed: %s", exc)
-        # In debug mode expose the link so you can test without SMTP
-        if current_app.debug:
-            verify_url = (
-                f"{current_app.config['FRONTEND_URL']}"
-                f"/verify-email?token={verification_token}"
-            )
-            return jsonify({
-                "message": "Registered. SMTP not configured — use the debug link.",
-                "debug_verify_url": verify_url,
-            }), 201
-        return jsonify({"error": "Failed to send verification email. Check SMTP settings."}), 500
+    # ── Send verification email (background thread – never blocks the worker) ──
+    _app = current_app._get_current_object()
+    def _send_verify():
+        with _app.app_context():
+            try:
+                send_verification_email(email, verification_token)
+            except Exception as exc:
+                _app.logger.error("Email send failed [%s]: %s", type(exc).__name__, exc)
+    threading.Thread(target=_send_verify, daemon=True).start()
 
     return jsonify({
         "message": f"Registration successful. Check {email} to verify your account."
@@ -186,16 +180,14 @@ def forgot_password():
         }},
     )
 
-    try:
-        send_reset_email(email, reset_token)
-    except Exception as exc:
-        current_app.logger.error("Reset email send failed: %s", exc)
-        if current_app.debug:
-            reset_url = (
-                f"{current_app.config['FRONTEND_URL']}"
-                f"/reset-password?token={reset_token}"
-            )
-            return jsonify({**GENERIC, "debug_reset_url": reset_url}), 200
+    _app = current_app._get_current_object()
+    def _send_reset():
+        with _app.app_context():
+            try:
+                send_reset_email(email, reset_token)
+            except Exception as exc:
+                _app.logger.error("Reset email send failed [%s]: %s", type(exc).__name__, exc)
+    threading.Thread(target=_send_reset, daemon=True).start()
 
     return jsonify(GENERIC), 200
 

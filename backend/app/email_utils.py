@@ -1,18 +1,24 @@
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+import sendgrid
+from sendgrid.helpers.mail import Mail
 from flask import current_app
 
 
+def _send(to_email: str, subject: str, html_body: str) -> None:
+    """Send an email via SendGrid HTTP API."""
+    sg = sendgrid.SendGridAPIClient(api_key=current_app.config["SENDGRID_API_KEY"])
+    message = Mail(
+        from_email=current_app.config["MAIL_FROM"],
+        to_emails=to_email,
+        subject=subject,
+        html_content=html_body,
+    )
+    sg.send(message)
+
+
 def send_verification_email(to_email: str, token: str) -> None:
-    """Send an HTML verification email to the given address."""
+    """Send an HTML verification email via SendGrid."""
     frontend_url = current_app.config["FRONTEND_URL"]
     verify_url = f"{frontend_url}/verify-email?token={token}"
-
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = "Verify your MDH 1056 Library account"
-    msg["From"] = current_app.config["MAIL_FROM"]
-    msg["To"] = to_email
 
     html_body = f"""
     <html>
@@ -34,32 +40,13 @@ def send_verification_email(to_email: str, token: str) -> None:
     </html>
     """
 
-    msg.attach(MIMEText(html_body, "html"))
-
-    with smtplib.SMTP(current_app.config["MAIL_SERVER"],
-                      current_app.config["MAIL_PORT"]) as server:
-        server.ehlo()
-        server.starttls()
-        server.login(
-            current_app.config["MAIL_USERNAME"],
-            current_app.config["MAIL_PASSWORD"],
-        )
-        server.sendmail(
-            current_app.config["MAIL_FROM"],
-            to_email,
-            msg.as_string(),
-        )
+    _send(to_email, "Verify your MDH 1056 Library account", html_body)
 
 
 def send_reset_email(to_email: str, token: str) -> None:
-    """Send an HTML password reset email."""
+    """Send an HTML password reset email via SendGrid."""
     frontend_url = current_app.config["FRONTEND_URL"]
     reset_url = f"{frontend_url}/reset-password?token={token}"
-
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = "Reset your MDH 1056 Library password"
-    msg["From"] = current_app.config["MAIL_FROM"]
-    msg["To"] = to_email
 
     html_body = f"""
     <html>
@@ -80,18 +67,4 @@ def send_reset_email(to_email: str, token: str) -> None:
     </html>
     """
 
-    msg.attach(MIMEText(html_body, "html"))
-
-    with smtplib.SMTP(current_app.config["MAIL_SERVER"],
-                      current_app.config["MAIL_PORT"]) as server:
-        server.ehlo()
-        server.starttls()
-        server.login(
-            current_app.config["MAIL_USERNAME"],
-            current_app.config["MAIL_PASSWORD"],
-        )
-        server.sendmail(
-            current_app.config["MAIL_FROM"],
-            to_email,
-            msg.as_string(),
-        )
+    _send(to_email, "Reset your MDH 1056 Library password", html_body)
