@@ -57,7 +57,16 @@ def _pick_checkout_location(book: dict) -> tuple[str, dict]:
         return code, counts
 
     fallback = _normalize_location(book.get("location_code", ""))
-    return fallback, ({fallback: book.get("available_copies", 0)} if fallback else {})
+    if fallback:
+        return fallback, {fallback: int(book.get("available_copies", 0) or 0)}
+
+    # Backward-compatibility for legacy rows that predate shelf labeling.
+    # Treat as A1 so existing inventories remain check-outable.
+    available = int(book.get("available_copies", 0) or 0)
+    if available > 0:
+        return "A1", {"A1": available}
+
+    return "", {}
 
 
 
@@ -200,13 +209,27 @@ def cart_checkout():
 
     # Execute checkouts
     results = []
+    failures = []
     for item in items:
         qty = max(1, int(item.get("quantity", 1)))
         for _ in range(qty):
             doc, err = _do_checkout(db, item["book_id"], user["sub"], user["email"], user)
             if err:
-                continue   # shouldn't happen after pre-validation
+                failures.append(err[0].get("error", "Checkout failed."))
+                continue
             results.append(_serialize(doc))
+
+    if failures and not results:
+        unique = list(dict.fromkeys(failures))
+        return jsonify({"error": "; ".join(unique)}), 409
+
+    if failures:
+        unique = list(dict.fromkeys(failures))
+        return jsonify({
+            "checked_out": len(results),
+            "checkouts": results,
+            "warning": f"{len(failures)} copy/copies failed: {'; '.join(unique)}",
+        }), 201
 
     return jsonify({"checked_out": len(results), "checkouts": results}), 201
 
