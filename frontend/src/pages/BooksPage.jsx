@@ -29,6 +29,16 @@ export default function BooksPage() {
 
   const cartQty = (bookId) => cart.find(i => i.id === bookId)?.quantity || 0;
 
+  const locationSummary = (book) => {
+    const counts = book.location_counts || {};
+    const entries = Object.entries(counts).filter(([, count]) => Number(count) > 0);
+    if (entries.length === 0) return book.location_code || "—";
+    return entries
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([code, count]) => `${code}:${count}`)
+      .join(", ");
+  };
+
   return (
     <div>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"0.5rem" }}>
@@ -79,7 +89,7 @@ export default function BooksPage() {
                 <td>{book.author}</td>
                 <td style={{color:"#888",fontSize:"0.85rem"}}>{book.isbn || "—"}</td>
                 <td>
-                  <span style={styles.locationTag}>{book.location_code || "—"}</span>
+                  <span style={styles.locationTag}>{locationSummary(book)}</span>
                 </td>
                 <td>
                   <span style={book.available_copies > 0 ? styles.avail : styles.unavail}>

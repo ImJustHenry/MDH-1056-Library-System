@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import api from "../api/client";
 import { useAuth } from "../context/AuthContext";
-import { SHELF_OPTIONS } from "../constants/shelfLocations";
+import { SHELF_COLUMNS, SHELF_LEVELS } from "../constants/shelfLocations";
 
 export default function CheckoutsPage() {
   const { user } = useAuth();
@@ -10,7 +10,8 @@ export default function CheckoutsPage() {
   const [error,     setError]     = useState("");
   const [msg,       setMsg]       = useState("");
   const [returnTarget, setReturnTarget] = useState(null);
-  const [returnLocation, setReturnLocation] = useState("A1");
+  const [returnShelf, setReturnShelf] = useState("A");
+  const [returnLevel, setReturnLevel] = useState("1");
 
   const fetchCheckouts = async (status = "") => {
     const params = status ? { status } : {};
@@ -26,12 +27,17 @@ export default function CheckoutsPage() {
 
   const openReturnPopup = (checkout) => {
     setReturnTarget(checkout);
-    setReturnLocation(checkout.book_location || "A1");
+    const location = (checkout.book_location || "A1").toUpperCase();
+    const shelf = SHELF_COLUMNS.includes(location.charAt(0)) ? location.charAt(0) : "A";
+    const level = String(Number(location.charAt(1)) || 1);
+    setReturnShelf(shelf);
+    setReturnLevel(SHELF_LEVELS.map(String).includes(level) ? level : "1");
   };
 
   const handleReturn = async () => {
     if (!returnTarget) return;
     setMsg(""); setError("");
+    const returnLocation = `${returnShelf}${returnLevel}`;
     try {
       const { data } = await api.post(`/checkouts/${returnTarget.id}/return`, {
         location_code: returnLocation,
@@ -116,15 +122,35 @@ export default function CheckoutsPage() {
             <p style={{ marginTop: 0, color: "#555", fontSize: "0.92rem" }}>
               Where did you place <strong>{returnTarget.book_title}</strong>?
             </p>
-            <select
-              style={styles.select}
-              value={returnLocation}
-              onChange={(e) => setReturnLocation(e.target.value)}
-            >
-              {SHELF_OPTIONS.map((location) => (
-                <option key={location} value={location}>{location}</option>
-              ))}
-            </select>
+            <div style={styles.returnSelectors}>
+              <div style={{ flex: 1 }}>
+                <label style={styles.selectLabel}>Shelf</label>
+                <select
+                  style={styles.select}
+                  value={returnShelf}
+                  onChange={(e) => setReturnShelf(e.target.value)}
+                >
+                  {SHELF_COLUMNS.map((shelf) => (
+                    <option key={shelf} value={shelf}>{shelf}</option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={styles.selectLabel}>Height</label>
+                <select
+                  style={styles.select}
+                  value={returnLevel}
+                  onChange={(e) => setReturnLevel(e.target.value)}
+                >
+                  {SHELF_LEVELS.map((level) => (
+                    <option key={level} value={String(level)}>{level}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <p style={{ marginTop: "0.65rem", color: "#334155", fontSize: "0.88rem" }}>
+              Selected location: <strong>{returnShelf}{returnLevel}</strong>
+            </p>
             <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5rem", marginTop: "1rem" }}>
               <button style={styles.btnOutline} onClick={() => setReturnTarget(null)}>Cancel</button>
               <button style={styles.btn} onClick={handleReturn}>Confirm Return</button>
@@ -161,6 +187,8 @@ const styles = {
                    display:"flex", alignItems:"center", justifyContent:"center", zIndex:300 },
   modalCard: { background:"#fff", borderRadius:"8px", width:"100%", maxWidth:"420px",
                padding:"1rem", boxShadow:"0 12px 32px rgba(0,0,0,0.24)", margin:"0 1rem" },
+  returnSelectors: { display:"flex", gap:"0.6rem" },
+  selectLabel: { display:"block", marginBottom:"0.35rem", color:"#334155", fontSize:"0.85rem", fontWeight:"600" },
   select: { width:"100%", padding:"0.55rem 0.75rem", border:"1px solid #ccc",
             borderRadius:"4px", fontSize:"0.95rem" },
 };
