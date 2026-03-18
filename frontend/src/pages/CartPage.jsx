@@ -10,12 +10,22 @@ export default function CartPage() {
   const [error,   setError]   = useState("");
   const [success, setSuccess] = useState("");
 
+  const locationSummary = (item) => {
+    const counts = item.location_counts || {};
+    const entries = Object.entries(counts).filter(([, count]) => Number(count) > 0);
+    if (entries.length === 0) return item.location_code || "Unknown";
+    return entries
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([code, count]) => `${code}:${count}`)
+      .join(", ");
+  };
+
   const handleCheckout = async () => {
     if (cart.length === 0) return;
     setError(""); setSuccess(""); setLoading(true);
 
     const locationLines = cart.map((item) =>
-      `• ${item.title} (x${item.quantity}) → ${item.location_code || "Unknown"}`
+      `• ${item.title} (x${item.quantity}) → ${locationSummary(item)}`
     );
     const proceed = window.confirm(
       `Shelf locations for pickup:\n\n${locationLines.join("\n")}\n\nContinue checkout?`

@@ -31,6 +31,35 @@ def _normalize_location(location_code: str) -> str:
     return code
 
 
+def _normalize_location_counts(raw_counts) -> dict:
+    if not isinstance(raw_counts, dict):
+        return {}
+
+    normalized = {}
+    for raw_code, raw_count in raw_counts.items():
+        code = _normalize_location(str(raw_code))
+        if not code:
+            continue
+        try:
+            count = int(raw_count)
+        except Exception:
+            continue
+        if count > 0:
+            normalized[code] = normalized.get(code, 0) + count
+    return normalized
+
+
+def _pick_checkout_location(book: dict) -> tuple[str, dict]:
+    counts = _normalize_location_counts(book.get("location_counts", {}))
+    if counts:
+        # Prefer slots with more available copies, then deterministic by code.
+        code = sorted(counts.keys(), key=lambda key: (-counts[key], key))[0]
+        return code, counts
+
+    fallback = _normalize_location(book.get("location_code", ""))
+    return fallback, ({fallback: book.get("available_copies", 0)} if fallback else {})
+
+
 
 
 def _serialize(doc: dict) -> dict:
@@ -77,11 +106,19 @@ def _do_checkout(db, book_id_str: str, user_id: str,
         return None, ({"error": "Invalid user ID."}, 400)
 
     now = datetime.datetime.utcnow()
+    checkout_location, location_counts = _pick_checkout_location(book)
+    if not checkout_location:
+        return None, ({"error": "Book has no valid shelf location configured."}, 409)
+
+    location_counts[checkout_location] = max(0, location_counts.get(checkout_location, 0) - 1)
+    if location_counts[checkout_location] == 0:
+        del location_counts[checkout_location]
+
     doc = {
         "book_id":        oid,
         "book_title":     book["title"],
         "book_isbn":      book.get("isbn", ""),
-        "book_location":  book.get("location_code", ""),
+        "book_location":  checkout_location,
         "user_id":        uid,
         "user_email":     user_email,
         "checked_out_at": now,
@@ -89,7 +126,16 @@ def _do_checkout(db, book_id_str: str, user_id: str,
         "status":         "active",
     }
     result = db.checkouts.insert_one(doc)
-    db.books.update_one({"_id": oid}, {"$inc": {"available_copies": -1}})
+    db.books.update_one(
+        {"_id": oid},
+        {
+            "$inc": {"available_copies": -1},
+            "$set": {
+                "location_counts": location_counts,
+                "location_code": checkout_location,
+            },
+        },
+    )
 
     _log(db, action="checkout", user=performed_by,
          book_id=oid, book_title=book["title"],
@@ -237,9 +283,20 @@ def return_book(checkout_id):
         {"_id": oid},
         {"$set": {"status": "returned", "returned_at": now, "returned_location": location_code}},
     )
+
+    book = db.books.find_one({"_id": checkout["book_id"]}) or {}
+    location_counts = _normalize_location_counts(book.get("location_counts", {}))
+    location_counts[location_code] = location_counts.get(location_code, 0) + 1
+
     db.books.update_one(
         {"_id": checkout["book_id"]},
-        {"$inc": {"available_copies": 1}, "$set": {"location_code": location_code}},
+        {
+            "$inc": {"available_copies": 1},
+            "$set": {
+                "location_code": location_code,
+                "location_counts": location_counts,
+            },
+        },
     )
 
     _log(db, action="return", user=user,

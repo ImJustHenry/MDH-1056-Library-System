@@ -6,6 +6,13 @@ export default function DashboardPage() {
   const [shelfMap, setShelfMap] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [isPhone, setIsPhone] = useState(window.innerWidth <= 680);
+
+  useEffect(() => {
+    const onResize = () => setIsPhone(window.innerWidth <= 680);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   useEffect(() => {
     Promise.all([api.get("/dashboard"), api.get("/dashboard/shelf-map")])
@@ -48,12 +55,14 @@ export default function DashboardPage() {
         </p>
 
         {shelfMap && (
-          <div style={styles.mapWrap}>
+          <div style={styles.mapWrap(isPhone)}>
             {shelfMap.slots.map((slot) => (
               <div key={slot.location_code} style={styles.slot}>
                 <div style={styles.slotHead}>{slot.location_code}</div>
                 <div style={styles.slotBody}>
-                  <div style={styles.slotCount}>{slot.title_count} title(s)</div>
+                  <div style={styles.slotCount}>
+                    {slot.available_total} cop{slot.available_total === 1 ? "y" : "ies"}
+                  </div>
                   {slot.titles.length > 0 ? (
                     <ul style={styles.slotTitles}>
                       {slot.titles.slice(0, 3).map((title) => (
@@ -81,11 +90,16 @@ const styles = {
   label: { marginTop:"0.5rem", color:"#666", fontSize:"0.9rem" },
   shelfSection: { marginTop:"1.5rem", background:"#fff", borderRadius:"8px", boxShadow:"0 2px 8px rgba(0,0,0,0.08)", padding:"1rem" },
   shelfHint: { marginTop:"0.35rem", color:"#555", fontSize:"0.9rem" },
-  mapWrap: { marginTop:"0.75rem", display:"grid", gridTemplateColumns:"repeat(4, minmax(130px, 1fr))", gap:"0.6rem" },
+  mapWrap: (isPhone) => ({
+    marginTop:"0.75rem",
+    display:"grid",
+    gridTemplateColumns: isPhone ? "repeat(4, minmax(68px, 1fr))" : "repeat(4, minmax(130px, 1fr))",
+    gap: isPhone ? "0.35rem" : "0.6rem",
+  }),
   slot: { border:"1px solid #dbe3f0", borderRadius:"8px", overflow:"hidden", background:"#f9fbff" },
-  slotHead: { background:"#e8f0fe", color:"#003087", padding:"0.35rem 0.55rem", fontWeight:"700", fontSize:"0.85rem" },
-  slotBody: { padding:"0.5rem 0.55rem", minHeight:"88px" },
-  slotCount: { color:"#334155", fontSize:"0.8rem", fontWeight:"600", marginBottom:"0.25rem" },
-  slotTitles: { margin:0, paddingLeft:"1rem", color:"#475569", fontSize:"0.78rem", lineHeight:1.4 },
-  slotEmpty: { color:"#94a3b8", fontSize:"0.8rem", fontStyle:"italic" },
+  slotHead: { background:"#e8f0fe", color:"#003087", padding:"0.3rem 0.4rem", fontWeight:"700", fontSize:"0.78rem" },
+  slotBody: { padding:"0.4rem", minHeight:"72px" },
+  slotCount: { color:"#334155", fontSize:"0.72rem", fontWeight:"600", marginBottom:"0.2rem" },
+  slotTitles: { margin:0, paddingLeft:"0.85rem", color:"#475569", fontSize:"0.7rem", lineHeight:1.35 },
+  slotEmpty: { color:"#94a3b8", fontSize:"0.7rem", fontStyle:"italic" },
 };

@@ -30,6 +30,46 @@ def _normalize_location(location_code: str) -> str:
     return code
 
 
+def _normalize_location_counts(raw_counts) -> dict:
+    if not isinstance(raw_counts, dict):
+        return {}
+
+    normalized = {}
+    for raw_code, raw_count in raw_counts.items():
+        code = _normalize_location(str(raw_code))
+        if not code:
+            continue
+        try:
+            count = int(raw_count)
+        except Exception:
+            continue
+        if count > 0:
+            normalized[code] = normalized.get(code, 0) + count
+    return normalized
+
+
+def _rebalance_location_counts(counts: dict, target_available: int, fallback_location: str) -> dict:
+    working = {code: int(count) for code, count in counts.items() if int(count) > 0}
+    current_total = sum(working.values())
+
+    if current_total > target_available:
+        to_remove = current_total - target_available
+        for code in sorted(working.keys(), reverse=True):
+            if to_remove <= 0:
+                break
+            take = min(working[code], to_remove)
+            working[code] -= take
+            to_remove -= take
+            if working[code] <= 0:
+                del working[code]
+    elif current_total < target_available:
+        add = target_available - current_total
+        if fallback_location:
+            working[fallback_location] = working.get(fallback_location, 0) + add
+
+    return working
+
+
 def _serialize(book: dict) -> dict:
     book["id"] = str(book.pop("_id"))
     return book
@@ -104,11 +144,18 @@ def add_book():
         return jsonify({"error": "A book with that ISBN already exists."}), 409
 
     now = datetime.datetime.utcnow()
+    location_counts = _normalize_location_counts(data.get("location_counts", {}))
+    if location_counts:
+        location_counts = _rebalance_location_counts(location_counts, total, location_code)
+    else:
+        location_counts = {location_code: total}
+
     doc = {
         "title":            title,
         "author":           author,
         "isbn":             isbn,
         "location_code":    location_code,
+        "location_counts":  location_counts,
         "description":      data.get("description", "").strip(),
         "total_copies":     total,
         "available_copies": total,
@@ -142,7 +189,7 @@ def edit_book(book_id):
         return jsonify({"error": "Book not found."}), 404
 
     data = request.get_json(silent=True) or {}
-    allowed = ["title", "author", "isbn", "description", "total_copies", "location_code"]
+    allowed = ["title", "author", "isbn", "description", "total_copies", "location_code", "location_counts"]
     updates = {k: data[k] for k in allowed if k in data}
 
     if "location_code" in updates:
@@ -158,6 +205,21 @@ def edit_book(book_id):
         checked_out = book["total_copies"] - book["available_copies"]
         updates["available_copies"] = max(0, new_total - checked_out)
         updates["total_copies"]     = new_total
+
+    if "location_counts" in updates:
+        normalized_counts = _normalize_location_counts(updates["location_counts"])
+        if not normalized_counts:
+            return jsonify({"error": "location_counts must include at least one valid A1-D6 entry with count > 0."}), 400
+        target_available = updates.get("available_copies", book.get("available_copies", 0))
+        fallback_location = updates.get("location_code", book.get("location_code", ""))
+        updates["location_counts"] = _rebalance_location_counts(normalized_counts, target_available, fallback_location)
+    else:
+        fallback_location = updates.get("location_code", book.get("location_code", ""))
+        existing_counts = _normalize_location_counts(book.get("location_counts", {}))
+        if not existing_counts and fallback_location:
+            existing_counts = {fallback_location: book.get("available_copies", 0)}
+        target_available = updates.get("available_copies", book.get("available_copies", 0))
+        updates["location_counts"] = _rebalance_location_counts(existing_counts, target_available, fallback_location)
 
     updates["updated_at"] = datetime.datetime.utcnow()
     db.books.update_one({"_id": oid}, {"$set": updates})

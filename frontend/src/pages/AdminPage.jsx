@@ -66,7 +66,7 @@ export default function AdminPage() {
   const handleAdminCheckout = async (e) => {
     e.preventDefault(); setError(""); setMsg("");
     if (selectedBooks.length === 0) { setError("Select at least one book."); return; }
-    const lines = selectedBooks.map((b) => `• ${b.title} → ${b.location_code || "Unknown"}`);
+    const lines = selectedBooks.map((b) => `• ${b.title} → ${locationSummary(b)}`);
     const proceed = window.confirm(
       `Shelf locations for pickup:\n\n${lines.join("\n")}\n\nContinue checkout for ${userEmail}?`
     );
@@ -96,6 +96,16 @@ export default function AdminPage() {
     (b.title.toLowerCase().includes(bookSearch.toLowerCase()) ||
      b.author.toLowerCase().includes(bookSearch.toLowerCase()))
   );
+
+  const locationSummary = (book) => {
+    const counts = book.location_counts || {};
+    const entries = Object.entries(counts).filter(([, count]) => Number(count) > 0);
+    if (entries.length === 0) return book.location_code || "Unknown";
+    return entries
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([code, count]) => `${code}:${count}`)
+      .join(", ");
+  };
 
   const fmt = (d) => d ? new Date(d).toLocaleDateString() : "—";
 
@@ -217,6 +227,7 @@ export default function AdminPage() {
                             title: b.title,
                             author: b.author,
                             location_code: b.location_code,
+                            location_counts: b.location_counts,
                           }]);
                           setBookSearch("");
                           setBookDropdown(false);
@@ -224,7 +235,7 @@ export default function AdminPage() {
                         <strong>{b.title}</strong>
                         <span style={{color:"#666", fontSize:"0.85rem"}}> — {b.author}</span>
                         <span style={{ marginLeft:"0.5rem", color:"#003087", fontSize:"0.8rem", fontWeight:"600" }}>
-                          [{b.location_code || "—"}]
+                          [{locationSummary(b)}]
                         </span>
                         <span style={{float:"right", fontSize:"0.8rem", color:"#888"}}>{b.available_copies} avail.</span>
                       </li>
@@ -241,7 +252,7 @@ export default function AdminPage() {
                   <span key={b.id} style={styles.chip}>
                     <strong>{b.title}</strong>
                     <span style={{color:"#555", fontSize:"0.8rem"}}> — {b.author}</span>
-                    <span style={{color:"#003087", fontSize:"0.78rem", fontWeight:"600"}}>[{b.location_code || "—"}]</span>
+                    <span style={{color:"#003087", fontSize:"0.78rem", fontWeight:"600"}}>[{locationSummary(b)}]</span>
                     <button type="button"
                       onClick={() => setSelectedBooks(prev => prev.filter(s => s.id !== b.id))}
                       style={styles.chipRemove}
