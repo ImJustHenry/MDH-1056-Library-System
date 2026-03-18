@@ -65,10 +65,12 @@ export default function DashboardPage() {
                   </div>
                   {slot.titles.length > 0 ? (
                     <ul style={styles.slotTitles}>
-                      {slot.titles.slice(0, 3).map((title) => (
-                        <li key={`${slot.location_code}-${title}`}>{title}</li>
+                      {(slot.title_entries || []).slice(0, 3).map((entry) => (
+                        <li key={`${slot.location_code}-${entry.title}`}>
+                          {entry.title} <span style={styles.titleCopies}>(x{entry.copies})</span>
+                        </li>
                       ))}
-                      {slot.titles.length > 3 && <li>+{slot.titles.length - 3} more</li>}
+                      {(slot.title_entries || []).length > 3 && <li>+{slot.title_entries.length - 3} more</li>}
                     </ul>
                   ) : (
                     <div style={styles.slotEmpty}>Empty</div>
@@ -101,5 +103,6 @@ const styles = {
   slotBody: { padding:"0.4rem", minHeight:"72px" },
   slotCount: { color:"#334155", fontSize:"0.72rem", fontWeight:"600", marginBottom:"0.2rem" },
   slotTitles: { margin:0, paddingLeft:"0.85rem", color:"#475569", fontSize:"0.7rem", lineHeight:1.35 },
+  titleCopies: { color:"#1d4ed8", fontWeight:"600" },
   slotEmpty: { color:"#94a3b8", fontSize:"0.7rem", fontStyle:"italic" },
 };

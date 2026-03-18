@@ -93,6 +93,7 @@ def get_shelf_map():
         "copies_total": 0,
         "available_total": 0,
         "titles": [],
+        "title_entries": [],
     } for level in SHELF_LEVELS for column in SHELF_COLUMNS}
 
     for book in books:
@@ -110,6 +111,18 @@ def get_shelf_map():
             slot["copies_total"] += count
             slot["available_total"] += count
             slot["titles"].append(book.get("title", "Untitled"))
+
+            existing = next((entry for entry in slot["title_entries"] if entry["title"] == book.get("title", "Untitled")), None)
+            if existing:
+                existing["copies"] += count
+            else:
+                slot["title_entries"].append({
+                    "title": book.get("title", "Untitled"),
+                    "copies": count,
+                })
+
+    for slot in slots.values():
+        slot["title_entries"].sort(key=lambda entry: entry["title"].lower())
 
     ordered_slots = [slots[f"{column}{level}"] for level in SHELF_LEVELS for column in SHELF_COLUMNS]
 
