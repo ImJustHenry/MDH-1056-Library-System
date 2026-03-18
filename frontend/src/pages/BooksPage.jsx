@@ -61,12 +61,12 @@ export default function BooksPage() {
         <thead>
           <tr style={styles.header}>
             <th>Title</th><th>Author</th><th>ISBN</th>
-            <th>Copies</th><th></th>
+            <th>Location</th><th>Copies</th><th></th>
           </tr>
         </thead>
         <tbody>
           {books.length === 0 && (
-            <tr><td colSpan={5} style={{textAlign:"center",padding:"1rem",color:"#888"}}>
+            <tr><td colSpan={6} style={{textAlign:"center",padding:"1rem",color:"#888"}}>
               No books found.
             </td></tr>
           )}
@@ -78,6 +78,9 @@ export default function BooksPage() {
                 <td>{book.title}</td>
                 <td>{book.author}</td>
                 <td style={{color:"#888",fontSize:"0.85rem"}}>{book.isbn || "—"}</td>
+                <td>
+                  <span style={styles.locationTag}>{book.location_code || "—"}</span>
+                </td>
                 <td>
                   <span style={book.available_copies > 0 ? styles.avail : styles.unavail}>
                     {book.available_copies}/{book.total_copies}
@@ -142,6 +145,8 @@ const styles = {
              borderRadius:"12px", fontSize:"0.85rem" },
   unavail: { background:"#ffeaea", color:"#c00", padding:"2px 8px",
              borderRadius:"12px", fontSize:"0.85rem" },
+  locationTag: { background:"#e8f0fe", color:"#003087", padding:"2px 8px",
+                 borderRadius:"12px", fontSize:"0.85rem", fontWeight:"600" },
   error:   { background:"#ffeaea", color:"#c00", padding:"0.6rem",
              borderRadius:"4px", marginBottom:"0.5rem" },
 };

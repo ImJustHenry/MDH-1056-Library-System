@@ -2,13 +2,17 @@ import { useEffect, useState } from "react";
 import api from "../api/client";
 
 export default function DashboardPage() {
-  const [stats,   setStats]   = useState(null);
-  const [error,   setError]   = useState("");
+  const [stats, setStats] = useState(null);
+  const [shelfMap, setShelfMap] = useState(null);
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.get("/dashboard")
-      .then(({ data }) => setStats(data))
+    Promise.all([api.get("/dashboard"), api.get("/dashboard/shelf-map")])
+      .then(([statsRes, shelfMapRes]) => {
+        setStats(statsRes.data);
+        setShelfMap(shelfMapRes.data);
+      })
       .catch(() => setError("Failed to load dashboard."))
       .finally(() => setLoading(false));
   }, []);
@@ -36,15 +40,52 @@ export default function DashboardPage() {
           </div>
         ))}
       </div>
+
+      <div style={styles.shelfSection}>
+        <h3 style={{ margin: 0 }}>Shelf Map (A-D x 1-6)</h3>
+        <p style={styles.shelfHint}>
+          Example: <strong>A3</strong> means column A (left-most shelf), level 3.
+        </p>
+
+        {shelfMap && (
+          <div style={styles.mapWrap}>
+            {shelfMap.slots.map((slot) => (
+              <div key={slot.location_code} style={styles.slot}>
+                <div style={styles.slotHead}>{slot.location_code}</div>
+                <div style={styles.slotBody}>
+                  <div style={styles.slotCount}>{slot.title_count} title(s)</div>
+                  {slot.titles.length > 0 ? (
+                    <ul style={styles.slotTitles}>
+                      {slot.titles.slice(0, 3).map((title) => (
+                        <li key={`${slot.location_code}-${title}`}>{title}</li>
+                      ))}
+                      {slot.titles.length > 3 && <li>+{slot.titles.length - 3} more</li>}
+                    </ul>
+                  ) : (
+                    <div style={styles.slotEmpty}>Empty</div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
 const styles = {
-  grid:  { display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(180px, 1fr))",
-           gap:"1rem", marginTop:"1rem" },
-  card:  { background:"#fff", padding:"1.5rem", borderRadius:"8px",
-           boxShadow:"0 2px 8px rgba(0,0,0,0.08)", textAlign:"center" },
+  grid: { display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(180px, 1fr))", gap:"1rem", marginTop:"1rem" },
+  card: { background:"#fff", padding:"1.5rem", borderRadius:"8px", boxShadow:"0 2px 8px rgba(0,0,0,0.08)", textAlign:"center" },
   value: { fontSize:"2.5rem", fontWeight:"bold", lineHeight:1 },
   label: { marginTop:"0.5rem", color:"#666", fontSize:"0.9rem" },
+  shelfSection: { marginTop:"1.5rem", background:"#fff", borderRadius:"8px", boxShadow:"0 2px 8px rgba(0,0,0,0.08)", padding:"1rem" },
+  shelfHint: { marginTop:"0.35rem", color:"#555", fontSize:"0.9rem" },
+  mapWrap: { marginTop:"0.75rem", display:"grid", gridTemplateColumns:"repeat(4, minmax(130px, 1fr))", gap:"0.6rem" },
+  slot: { border:"1px solid #dbe3f0", borderRadius:"8px", overflow:"hidden", background:"#f9fbff" },
+  slotHead: { background:"#e8f0fe", color:"#003087", padding:"0.35rem 0.55rem", fontWeight:"700", fontSize:"0.85rem" },
+  slotBody: { padding:"0.5rem 0.55rem", minHeight:"88px" },
+  slotCount: { color:"#334155", fontSize:"0.8rem", fontWeight:"600", marginBottom:"0.25rem" },
+  slotTitles: { margin:0, paddingLeft:"1rem", color:"#475569", fontSize:"0.78rem", lineHeight:1.4 },
+  slotEmpty: { color:"#94a3b8", fontSize:"0.8rem", fontStyle:"italic" },
 };

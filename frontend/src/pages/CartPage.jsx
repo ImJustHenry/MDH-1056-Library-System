@@ -13,6 +13,18 @@ export default function CartPage() {
   const handleCheckout = async () => {
     if (cart.length === 0) return;
     setError(""); setSuccess(""); setLoading(true);
+
+    const locationLines = cart.map((item) =>
+      `• ${item.title} (x${item.quantity}) → ${item.location_code || "Unknown"}`
+    );
+    const proceed = window.confirm(
+      `Shelf locations for pickup:\n\n${locationLines.join("\n")}\n\nContinue checkout?`
+    );
+    if (!proceed) {
+      setLoading(false);
+      return;
+    }
+
     try {
       const payload = cart.map(i => ({ book_id: i.id, quantity: i.quantity }));
       const { data } = await api.post("/checkouts/cart-checkout", payload);

@@ -17,6 +17,18 @@ from ..middleware.auth import token_required, admin_required
 
 books_bp = Blueprint("books", __name__)
 
+SHELF_COLUMNS = {"A", "B", "C", "D"}
+SHELF_LEVELS = {"1", "2", "3", "4", "5", "6"}
+
+
+def _normalize_location(location_code: str) -> str:
+    code = (location_code or "").strip().upper()
+    if len(code) != 2:
+        return ""
+    if code[0] not in SHELF_COLUMNS or code[1] not in SHELF_LEVELS:
+        return ""
+    return code
+
 
 def _serialize(book: dict) -> dict:
     book["id"] = str(book.pop("_id"))
@@ -74,9 +86,12 @@ def add_book():
     data = request.get_json(silent=True) or {}
     title  = data.get("title",  "").strip()
     author = data.get("author", "").strip()
+    location_code = _normalize_location(data.get("location_code", ""))
 
     if not title or not author:
         return jsonify({"error": "title and author are required."}), 400
+    if not location_code:
+        return jsonify({"error": "location_code is required and must be A1-D6."}), 400
 
     total = int(data.get("total_copies", 1))
     if total < 1:
@@ -93,6 +108,7 @@ def add_book():
         "title":            title,
         "author":           author,
         "isbn":             isbn,
+        "location_code":    location_code,
         "description":      data.get("description", "").strip(),
         "total_copies":     total,
         "available_copies": total,
@@ -126,8 +142,14 @@ def edit_book(book_id):
         return jsonify({"error": "Book not found."}), 404
 
     data = request.get_json(silent=True) or {}
-    allowed = ["title", "author", "isbn", "description", "total_copies"]
+    allowed = ["title", "author", "isbn", "description", "total_copies", "location_code"]
     updates = {k: data[k] for k in allowed if k in data}
+
+    if "location_code" in updates:
+        normalized = _normalize_location(updates["location_code"])
+        if not normalized:
+            return jsonify({"error": "location_code must be in A1-D6 format."}), 400
+        updates["location_code"] = normalized
 
     if "total_copies" in updates:
         new_total = int(updates["total_copies"])

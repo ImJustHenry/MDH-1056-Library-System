@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import api from "../api/client";
 import { useAuth } from "../context/AuthContext";
+import { SHELF_OPTIONS } from "../constants/shelfLocations";
 
 export default function CheckoutsPage() {
   const { user } = useAuth();
@@ -8,6 +9,8 @@ export default function CheckoutsPage() {
   const [filter,    setFilter]    = useState("");
   const [error,     setError]     = useState("");
   const [msg,       setMsg]       = useState("");
+  const [returnTarget, setReturnTarget] = useState(null);
+  const [returnLocation, setReturnLocation] = useState("A1");
 
   const fetchCheckouts = async (status = "") => {
     const params = status ? { status } : {};
@@ -21,11 +24,20 @@ export default function CheckoutsPage() {
 
   useEffect(() => { fetchCheckouts(); }, []);
 
-  const handleReturn = async (checkoutId) => {
+  const openReturnPopup = (checkout) => {
+    setReturnTarget(checkout);
+    setReturnLocation(checkout.book_location || "A1");
+  };
+
+  const handleReturn = async () => {
+    if (!returnTarget) return;
     setMsg(""); setError("");
     try {
-      const { data } = await api.post(`/checkouts/${checkoutId}/return`);
-      setMsg(data.message);
+      const { data } = await api.post(`/checkouts/${returnTarget.id}/return`, {
+        location_code: returnLocation,
+      });
+      setMsg(`${data.message} Shelved at ${returnLocation}.`);
+      setReturnTarget(null);
       fetchCheckouts(filter);
     } catch (err) {
       setError(err.response?.data?.error || "Return failed.");
@@ -60,6 +72,7 @@ export default function CheckoutsPage() {
           <tr style={styles.header}>
             <th>Book</th>
             {user.role === "admin" && <th>User</th>}
+            <th>Location</th>
             <th>Checked Out</th>
             <th>Returned</th>
             <th>Status</th>
@@ -68,7 +81,7 @@ export default function CheckoutsPage() {
         </thead>
         <tbody>
           {checkouts.length === 0 && (
-            <tr><td colSpan={6} style={{textAlign:"center",padding:"1rem",color:"#888"}}>
+            <tr><td colSpan={user.role === "admin" ? 7 : 6} style={{textAlign:"center",padding:"1rem",color:"#888"}}>
               No checkouts found.
             </td></tr>
           )}
@@ -76,6 +89,7 @@ export default function CheckoutsPage() {
             <tr key={c.id} style={styles.row}>
               <td>{c.book_title}</td>
               {user.role === "admin" && <td style={{fontSize:"0.85rem"}}>{c.user_email}</td>}
+              <td><span style={styles.locationTag}>{c.book_location || "—"}</span></td>
               <td>{fmt(c.checked_out_at)}</td>
               <td>{fmt(c.returned_at)}</td>
               <td>
@@ -85,7 +99,7 @@ export default function CheckoutsPage() {
               </td>
               <td>
                 {c.status === "active" && (
-                  <button style={styles.btn} onClick={() => handleReturn(c.id)}>
+                  <button style={styles.btn} onClick={() => openReturnPopup(c)}>
                     Return
                   </button>
                 )}
@@ -94,6 +108,30 @@ export default function CheckoutsPage() {
           ))}
         </tbody>
       </table>
+
+      {returnTarget && (
+        <div style={styles.modalBackdrop}>
+          <div style={styles.modalCard}>
+            <h3 style={{ marginTop: 0, marginBottom: "0.6rem" }}>Return Book</h3>
+            <p style={{ marginTop: 0, color: "#555", fontSize: "0.92rem" }}>
+              Where did you place <strong>{returnTarget.book_title}</strong>?
+            </p>
+            <select
+              style={styles.select}
+              value={returnLocation}
+              onChange={(e) => setReturnLocation(e.target.value)}
+            >
+              {SHELF_OPTIONS.map((location) => (
+                <option key={location} value={location}>{location}</option>
+              ))}
+            </select>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5rem", marginTop: "1rem" }}>
+              <button style={styles.btnOutline} onClick={() => setReturnTarget(null)}>Cancel</button>
+              <button style={styles.btn} onClick={handleReturn}>Confirm Return</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -109,6 +147,8 @@ const styles = {
   table:    { width:"100%", borderCollapse:"collapse" },
   header:   { background:"#f0f4f8", textAlign:"left" },
   row:      { borderBottom:"1px solid #eee" },
+  locationTag: { background:"#e8f0fe", color:"#003087", padding:"2px 8px",
+                 borderRadius:"12px", fontSize:"0.85rem", fontWeight:"600" },
   active:   { background:"#fff3cd", color:"#856404", padding:"2px 8px",
               borderRadius:"12px", fontSize:"0.85rem" },
   returned: { background:"#eaffea", color:"#080", padding:"2px 8px",
@@ -117,4 +157,10 @@ const styles = {
               borderRadius:"4px", marginBottom:"0.5rem" },
   error:    { background:"#ffeaea", color:"#c00", padding:"0.6rem",
               borderRadius:"4px", marginBottom:"0.5rem" },
+  modalBackdrop: { position:"fixed", inset:0, background:"rgba(0,0,0,0.35)",
+                   display:"flex", alignItems:"center", justifyContent:"center", zIndex:300 },
+  modalCard: { background:"#fff", borderRadius:"8px", width:"100%", maxWidth:"420px",
+               padding:"1rem", boxShadow:"0 12px 32px rgba(0,0,0,0.24)", margin:"0 1rem" },
+  select: { width:"100%", padding:"0.55rem 0.75rem", border:"1px solid #ccc",
+            borderRadius:"4px", fontSize:"0.95rem" },
 };

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import api from "../api/client";
+import { SHELF_OPTIONS } from "../constants/shelfLocations";
 
 export default function AdminPage() {
   const [tab,       setTab]       = useState("books");
@@ -10,7 +11,7 @@ export default function AdminPage() {
   const [msg,       setMsg]       = useState("");
 
   // Add book form
-  const [form, setForm] = useState({ title:"", author:"", isbn:"", total_copies:1 });
+  const [form, setForm] = useState({ title:"", author:"", isbn:"", total_copies:1, location_code:"A1" });
 
   // Admin checkout form
   const [selectedBooks, setSelectedBooks] = useState([]);   // [{id, title, author}]
@@ -47,7 +48,7 @@ export default function AdminPage() {
     try {
       await api.post("/books", { ...form, total_copies: Number(form.total_copies) });
       setMsg("Book added successfully.");
-      setForm({ title:"", author:"", isbn:"", total_copies:1 });
+      setForm({ title:"", author:"", isbn:"", total_copies:1, location_code:"A1" });
       fetchBooks();
     } catch (err) { setError(err.response?.data?.error || "Failed to add book."); }
   };
@@ -65,6 +66,11 @@ export default function AdminPage() {
   const handleAdminCheckout = async (e) => {
     e.preventDefault(); setError(""); setMsg("");
     if (selectedBooks.length === 0) { setError("Select at least one book."); return; }
+    const lines = selectedBooks.map((b) => `• ${b.title} → ${b.location_code || "Unknown"}`);
+    const proceed = window.confirm(
+      `Shelf locations for pickup:\n\n${lines.join("\n")}\n\nContinue checkout for ${userEmail}?`
+    );
+    if (!proceed) return;
     try {
       const results = await Promise.allSettled(
         selectedBooks.map(b =>
@@ -128,6 +134,15 @@ export default function AdminPage() {
             <input style={{...styles.input, width:"120px"}} type="number" min="1"
               placeholder="Copies" value={form.total_copies}
               onChange={e => setForm(f => ({...f, total_copies: e.target.value}))} />
+            <select
+              style={{ ...styles.input, width:"120px", flex:"none" }}
+              value={form.location_code}
+              onChange={e => setForm(f => ({ ...f, location_code: e.target.value }))}
+            >
+              {SHELF_OPTIONS.map((location) => (
+                <option key={location} value={location}>{location}</option>
+              ))}
+            </select>
             <button style={styles.btn} type="submit">Add Book</button>
           </form>
 
@@ -142,7 +157,7 @@ export default function AdminPage() {
             <thead>
               <tr style={styles.header}>
                 <th>Title</th><th>Author</th><th>ISBN</th>
-                <th>Copies</th><th></th>
+                <th>Location</th><th>Copies</th><th></th>
               </tr>
             </thead>
             <tbody>
@@ -151,6 +166,7 @@ export default function AdminPage() {
                   <td>{b.title}</td>
                   <td>{b.author}</td>
                   <td style={{fontSize:"0.85rem",color:"#888"}}>{b.isbn || "—"}</td>
+                  <td><span style={styles.badge}>{b.location_code || "—"}</span></td>
                   <td>
                     <span style={{
                       fontWeight:"600",
@@ -196,12 +212,20 @@ export default function AdminPage() {
                         onMouseEnter={() => setHoveredBookId(b.id)}
                         onMouseLeave={() => setHoveredBookId(null)}
                         onMouseDown={() => {
-                          setSelectedBooks(prev => [...prev, { id: b.id, title: b.title, author: b.author }]);
+                          setSelectedBooks(prev => [...prev, {
+                            id: b.id,
+                            title: b.title,
+                            author: b.author,
+                            location_code: b.location_code,
+                          }]);
                           setBookSearch("");
                           setBookDropdown(false);
                         }}>
                         <strong>{b.title}</strong>
                         <span style={{color:"#666", fontSize:"0.85rem"}}> — {b.author}</span>
+                        <span style={{ marginLeft:"0.5rem", color:"#003087", fontSize:"0.8rem", fontWeight:"600" }}>
+                          [{b.location_code || "—"}]
+                        </span>
                         <span style={{float:"right", fontSize:"0.8rem", color:"#888"}}>{b.available_copies} avail.</span>
                       </li>
                     ))
@@ -217,6 +241,7 @@ export default function AdminPage() {
                   <span key={b.id} style={styles.chip}>
                     <strong>{b.title}</strong>
                     <span style={{color:"#555", fontSize:"0.8rem"}}> — {b.author}</span>
+                    <span style={{color:"#003087", fontSize:"0.78rem", fontWeight:"600"}}>[{b.location_code || "—"}]</span>
                     <button type="button"
                       onClick={() => setSelectedBooks(prev => prev.filter(s => s.id !== b.id))}
                       style={styles.chipRemove}
@@ -249,12 +274,12 @@ export default function AdminPage() {
           <table style={styles.table}>
             <thead>
               <tr style={styles.header}>
-                <th>Book</th><th>User</th><th>Checked Out</th>
+                <th>Book</th><th>User</th><th>Location</th><th>Checked Out</th>
               </tr>
             </thead>
             <tbody>
               {checkouts.length === 0 && (
-                <tr><td colSpan={3} style={{textAlign:"center",padding:"1rem",color:"#888"}}>
+                <tr><td colSpan={4} style={{textAlign:"center",padding:"1rem",color:"#888"}}>
                   Nothing checked out.
                 </td></tr>
               )}
@@ -262,6 +287,7 @@ export default function AdminPage() {
                 <tr key={c.id} style={styles.row}>
                   <td>{c.book_title}</td>
                   <td>{c.user_email}</td>
+                  <td><span style={styles.badge}>{c.book_location || "—"}</span></td>
                   <td>{fmt(c.checked_out_at)}</td>
                 </tr>
               ))}

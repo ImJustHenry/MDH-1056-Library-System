@@ -18,6 +18,18 @@ from ..middleware.auth import token_required, admin_required
 
 checkouts_bp = Blueprint("checkouts", __name__)
 
+SHELF_COLUMNS = {"A", "B", "C", "D"}
+SHELF_LEVELS = {"1", "2", "3", "4", "5", "6"}
+
+
+def _normalize_location(location_code: str) -> str:
+    code = (location_code or "").strip().upper()
+    if len(code) != 2:
+        return ""
+    if code[0] not in SHELF_COLUMNS or code[1] not in SHELF_LEVELS:
+        return ""
+    return code
+
 
 
 
@@ -69,6 +81,7 @@ def _do_checkout(db, book_id_str: str, user_id: str,
         "book_id":        oid,
         "book_title":     book["title"],
         "book_isbn":      book.get("isbn", ""),
+        "book_location":  book.get("location_code", ""),
         "user_id":        uid,
         "user_email":     user_email,
         "checked_out_at": now,
@@ -197,6 +210,11 @@ def admin_checkout():
 @checkouts_bp.route("/<checkout_id>/return", methods=["POST"])
 @token_required
 def return_book(checkout_id):
+    data = request.get_json(silent=True) or {}
+    location_code = _normalize_location(data.get("location_code", ""))
+    if not location_code:
+        return jsonify({"error": "location_code is required and must be A1-D6."}), 400
+
     db = get_db()
     try:
         oid = ObjectId(checkout_id)
@@ -217,18 +235,22 @@ def return_book(checkout_id):
     now = datetime.datetime.utcnow()
     db.checkouts.update_one(
         {"_id": oid},
-        {"$set": {"status": "returned", "returned_at": now}},
+        {"$set": {"status": "returned", "returned_at": now, "returned_location": location_code}},
     )
     db.books.update_one(
         {"_id": checkout["book_id"]},
-        {"$inc": {"available_copies": 1}},
+        {"$inc": {"available_copies": 1}, "$set": {"location_code": location_code}},
     )
 
     _log(db, action="return", user=user,
          book_id=checkout["book_id"], book_title=checkout["book_title"],
-         target_user_email=checkout["user_email"] if checkout["user_email"] != user["email"] else None)
+         target_user_email=checkout["user_email"] if checkout["user_email"] != user["email"] else None,
+         details=f"returned_location={location_code}")
 
-    return jsonify({"message": f"'{checkout['book_title']}' returned successfully."}), 200
+    return jsonify({
+        "message": f"'{checkout['book_title']}' returned successfully.",
+        "location_code": location_code,
+    }), 200
 
 
 # ---------------------------------------------------------------------------
