@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import ReCAPTCHA from "react-google-recaptcha";
 import { useAuth } from "../context/AuthContext";
@@ -9,6 +9,13 @@ export default function LoginPage() {
   const { login } = useAuth();
   const navigate   = useNavigate();
   const captchaRef = useRef(null);
+  const [isPhone, setIsPhone] = useState(window.innerWidth <= 420);
+
+  useEffect(() => {
+    const onResize = () => setIsPhone(window.innerWidth <= 420);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   const [email,        setEmail]        = useState("");
   const [password,     setPassword]     = useState("");
@@ -42,7 +49,7 @@ export default function LoginPage() {
 
   return (
     <div style={styles.wrapper}>
-      <div style={styles.card}>
+      <div style={styles.card(isPhone)}>
         <h2 style={styles.title}>Sign In</h2>
         <p style={styles.sub}>MDH 1056 Library System - @slu.edu only</p>
 
@@ -59,10 +66,11 @@ export default function LoginPage() {
             onChange={e => setPassword(e.target.value)}
             autoComplete="current-password" />
 
-          <div style={{ marginBottom: "1rem" }}>
+          <div style={styles.captchaWrap}>
             <ReCAPTCHA
               ref={captchaRef}
               sitekey={SITE_KEY}
+              size={isPhone ? "compact" : "normal"}
               onChange={token => setCaptchaToken(token || "")}
               onExpired={() => setCaptchaToken("")}
             />
@@ -85,8 +93,8 @@ export default function LoginPage() {
 
 const styles = {
   wrapper: { display:"flex", justifyContent:"center", alignItems:"center", minHeight:"80vh" },
-  card:    { background:"#fff", padding:"2rem", borderRadius:"8px",
-             boxShadow:"0 2px 12px rgba(0,0,0,0.1)", width:"100%", maxWidth:"400px" },
+  card:    (isPhone) => ({ background:"#fff", padding:isPhone ? "1.25rem" : "2rem", borderRadius:"8px",
+             boxShadow:"0 2px 12px rgba(0,0,0,0.1)", width:"100%", maxWidth:"400px" }),
   title:   { margin:"0 0 0.25rem", color:"#003087" },
   sub:     { margin:"0 0 1.25rem", color:"#666", fontSize:"0.85rem" },
   label:   { display:"block", marginBottom:"0.25rem", fontWeight:"600",
@@ -96,6 +104,7 @@ const styles = {
              boxSizing:"border-box" },
   btn:     { width:"100%", padding:"0.75rem", background:"#003087", color:"#fff",
              border:"none", borderRadius:"4px", fontSize:"1rem", cursor:"pointer" },
+  captchaWrap: { marginBottom:"1rem", display:"flex", justifyContent:"center" },
   error:   { background:"#ffeaea", color:"#c00", padding:"0.6rem 0.75rem",
              borderRadius:"4px", marginBottom:"1rem", fontSize:"0.9rem" },
   footer:  { textAlign:"center", marginTop:"1rem", fontSize:"0.9rem" },
