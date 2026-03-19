@@ -16,6 +16,8 @@ export default function AdminPage() {
   // Edit book modal
   const [editingBook,  setEditingBook]  = useState(null);
   const [editForm,     setEditForm]     = useState({});
+  const [editLocationMode, setEditLocationMode] = useState("single");
+  const [editLocationRows, setEditLocationRows] = useState([]);
 
   // Admin checkout form
   const [selectedBooks, setSelectedBooks] = useState([]);   // [{id, title, author}]
@@ -65,15 +67,38 @@ export default function AdminPage() {
 
   const handleEditBook = (book) => {
     setError(""); setMsg("");
+    const counts = Object.entries(book.location_counts || {})
+      .filter(([, count]) => Number(count) > 0)
+      .sort(([left], [right]) => left.localeCompare(right));
+    const fallbackCode = book.location_code || "A1";
+
     setEditingBook(book);
     setEditForm({
       title: book.title,
       author: book.author,
       isbn: book.isbn || "",
       total_copies: book.total_copies,
-      location_code: book.location_code,
+      location_code: fallbackCode,
       description: book.description || "",
     });
+    setEditLocationMode(counts.length > 1 ? "multi" : "single");
+    setEditLocationRows(
+      counts.length > 0
+        ? counts.map(([location_code, count]) => ({ location_code, count: Number(count) }))
+        : [{ location_code: fallbackCode, count: Number(book.available_copies || book.total_copies || 1) }]
+    );
+  };
+
+  const updateEditLocationRow = (index, patch) => {
+    setEditLocationRows(prev => prev.map((row, i) => (i === index ? { ...row, ...patch } : row)));
+  };
+
+  const addEditLocationRow = () => {
+    setEditLocationRows(prev => [...prev, { location_code: "A1", count: 1 }]);
+  };
+
+  const removeEditLocationRow = (index) => {
+    setEditLocationRows(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleSaveEdit = async () => {
@@ -86,18 +111,64 @@ export default function AdminPage() {
       setError("Stock must be an integer greater than or equal to 1.");
       return;
     }
-    try {
-      await api.put(`/books/${editingBook.id}`, {
+    const nextTotal = Number(editForm.total_copies);
+    const currentCheckedOut = Math.max(0, Number(editingBook.total_copies || 0) - Number(editingBook.available_copies || 0));
+    const targetAvailable = Math.max(0, nextTotal - currentCheckedOut);
+
+    const payload = {
         title: editForm.title,
         author: editForm.author,
         isbn: editForm.isbn,
-        total_copies: Number(editForm.total_copies),
+        total_copies: nextTotal,
         location_code: editForm.location_code,
         description: editForm.description,
-      });
+      };
+
+    if (editLocationMode === "single") {
+      if (targetAvailable > 0) {
+        payload.location_counts = { [editForm.location_code]: targetAvailable };
+      }
+    } else {
+      const counts = {};
+      for (const row of editLocationRows) {
+        const code = (row.location_code || "").trim().toUpperCase();
+        const count = Number(row.count);
+        if (!SHELF_OPTIONS.includes(code)) {
+          setError("Each split location must be a valid A1-D6 shelf.");
+          return;
+        }
+        if (!Number.isInteger(count) || count < 1) {
+          setError("Each split location count must be an integer greater than or equal to 1.");
+          return;
+        }
+        counts[code] = (counts[code] || 0) + count;
+      }
+
+      const splitTotal = Object.values(counts).reduce((sum, value) => sum + Number(value), 0);
+      if (targetAvailable > 0 && splitTotal !== targetAvailable) {
+        setError(`Split-location total must equal available copies (${targetAvailable}).`);
+        return;
+      }
+      if (targetAvailable > 0 && Object.keys(counts).length === 0) {
+        setError("Add at least one location row for split stock.");
+        return;
+      }
+
+      if (Object.keys(counts).length > 0) {
+        payload.location_counts = counts;
+      }
+      if (!counts[editForm.location_code] && Object.keys(counts).length > 0) {
+        payload.location_code = Object.keys(counts).sort()[0];
+      }
+    }
+
+    try {
+      await api.put(`/books/${editingBook.id}`, payload);
       setMsg("Book updated successfully.");
       setEditingBook(null);
       setEditForm({});
+      setEditLocationRows([]);
+      setEditLocationMode("single");
       fetchBooks();
     } catch (err) {
       if (err.response?.status === 409 && /isbn/i.test(err.response?.data?.error || "")) {
@@ -231,7 +302,9 @@ export default function AdminPage() {
                   <td>{b.title}</td>
                   <td>{b.author}</td>
                   <td style={{fontSize:"0.85rem",color:"#888"}}>{b.isbn || "—"}</td>
-                  <td><span style={styles.badge}>{b.location_code || "—"}</span></td>
+                  <td>
+                    <span style={styles.badge}>{locationSummary(b)}</span>
+                  </td>
                   <td>
                     <span style={{
                       fontWeight:"600",
@@ -376,6 +449,70 @@ export default function AdminPage() {
                   onChange={e => setEditForm({...editForm, description: e.target.value})} />
               </div>
             </div>
+
+            <div style={styles.locationModeWrap}>
+              <label style={styles.radioLabel}>
+                <input
+                  type="radio"
+                  name="edit-location-mode"
+                  checked={editLocationMode === "single"}
+                  onChange={() => setEditLocationMode("single")}
+                />
+                Keep all available copies in one location
+              </label>
+              <label style={styles.radioLabel}>
+                <input
+                  type="radio"
+                  name="edit-location-mode"
+                  checked={editLocationMode === "multi"}
+                  onChange={() => {
+                    setEditLocationMode("multi");
+                    if (editLocationRows.length === 0) {
+                      setEditLocationRows([{ location_code: editForm.location_code || "A1", count: 1 }]);
+                    }
+                  }}
+                />
+                Split available copies across multiple locations
+              </label>
+
+              {editLocationMode === "multi" && (
+                <div style={styles.locationRowsWrap}>
+                  {editLocationRows.map((row, index) => (
+                    <div key={`row-${index}`} style={styles.locationRow}>
+                      <select
+                        style={styles.modalInput}
+                        value={row.location_code}
+                        onChange={e => updateEditLocationRow(index, { location_code: e.target.value })}
+                      >
+                        {SHELF_OPTIONS.map(loc => <option key={loc} value={loc}>{loc}</option>)}
+                      </select>
+                      <input
+                        style={styles.modalInput}
+                        type="number"
+                        min="1"
+                        value={row.count}
+                        onChange={e => updateEditLocationRow(index, { count: e.target.value })}
+                      />
+                      <button
+                        type="button"
+                        style={styles.btnDanger}
+                        onClick={() => removeEditLocationRow(index)}
+                        disabled={editLocationRows.length === 1}
+                        title="Remove location row"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+
+                  <button type="button" style={styles.btnSecondary} onClick={addEditLocationRow}>Add Location Row</button>
+                  <p style={styles.locationHint}>
+                    Split rows must total available copies only.
+                  </p>
+                </div>
+              )}
+            </div>
+
             <div style={{display:"flex", gap:"0.5rem", justifyContent:"flex-end"}}>
               <button style={{...styles.btn, background:"#888"}} onClick={() => setEditingBook(null)}>Cancel</button>
               <button style={styles.btn} onClick={handleSaveEdit}>Save Changes</button>
@@ -485,6 +622,11 @@ const styles = {
   modalOverlay: { position:"fixed", top:0, left:0, right:0, bottom:0, background:"rgba(0,0,0,0.5)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:1000 },
   modalContent: { background:"#fff", borderRadius:"10px", padding:"2rem", maxWidth:"600px", width:"90vw", maxHeight:"90vh", overflowY:"auto", boxShadow:"0 20px 60px rgba(0,0,0,0.3)" },
   modalInput: { width:"100%", padding:"0.55rem 0.75rem", border:"1px solid #ccc", borderRadius:"4px", fontSize:"0.95rem", boxSizing:"border-box" },
+  locationModeWrap: { marginBottom:"1rem", borderTop:"1px solid #eee", paddingTop:"1rem", display:"grid", gap:"0.5rem" },
+  radioLabel: { display:"flex", alignItems:"center", gap:"0.5rem", fontSize:"0.92rem", color:"#333" },
+  locationRowsWrap: { display:"grid", gap:"0.5rem", marginTop:"0.25rem" },
+  locationRow: { display:"grid", gridTemplateColumns:"1fr 120px auto", gap:"0.5rem", alignItems:"center" },
+  locationHint: { margin:"0.1rem 0 0", color:"#666", fontSize:"0.82rem" },
   table:     { width:"100%", borderCollapse:"collapse" },
   header:    { background:"#f0f4f8", textAlign:"left" },
   row:       { borderBottom:"1px solid #eee" },
