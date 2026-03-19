@@ -112,8 +112,7 @@ export default function AdminPage() {
       return;
     }
     const nextTotal = Number(editForm.total_copies);
-    const currentCheckedOut = Math.max(0, Number(editingBook.total_copies || 0) - Number(editingBook.available_copies || 0));
-    const targetAvailable = Math.max(0, nextTotal - currentCheckedOut);
+    const targetAvailable = targetAvailableForEdit;
 
     const payload = {
         title: editForm.title,
@@ -129,29 +128,16 @@ export default function AdminPage() {
         payload.location_counts = { [editForm.location_code]: targetAvailable };
       }
     } else {
+      if (splitValidationMessage) {
+        setError(splitValidationMessage);
+        return;
+      }
+
       const counts = {};
       for (const row of editLocationRows) {
         const code = (row.location_code || "").trim().toUpperCase();
         const count = Number(row.count);
-        if (!SHELF_OPTIONS.includes(code)) {
-          setError("Each split location must be a valid A1-D6 shelf.");
-          return;
-        }
-        if (!Number.isInteger(count) || count < 1) {
-          setError("Each split location count must be an integer greater than or equal to 1.");
-          return;
-        }
         counts[code] = (counts[code] || 0) + count;
-      }
-
-      const splitTotal = Object.values(counts).reduce((sum, value) => sum + Number(value), 0);
-      if (targetAvailable > 0 && splitTotal !== targetAvailable) {
-        setError(`Split-location total must equal available copies (${targetAvailable}).`);
-        return;
-      }
-      if (targetAvailable > 0 && Object.keys(counts).length === 0) {
-        setError("Add at least one location row for split stock.");
-        return;
       }
 
       if (Object.keys(counts).length > 0) {
@@ -234,6 +220,34 @@ export default function AdminPage() {
   };
 
   const fmt = (d) => d ? new Date(d).toLocaleDateString() : "—";
+
+  const checkedOutForEdit = editingBook
+    ? Math.max(0, Number(editingBook.total_copies || 0) - Number(editingBook.available_copies || 0))
+    : 0;
+  const targetAvailableForEdit = editingBook
+    ? Math.max(0, Number(editForm.total_copies || 0) - checkedOutForEdit)
+    : 0;
+  const splitRowsTotal = editLocationRows.reduce((sum, row) => sum + Number(row.count || 0), 0);
+
+  const splitValidationMessage = (() => {
+    if (!editingBook || editLocationMode !== "multi") return "";
+    if (editLocationRows.length === 0) return "Add at least one split location row.";
+
+    for (const row of editLocationRows) {
+      const code = (row.location_code || "").trim().toUpperCase();
+      const count = Number(row.count);
+      if (!SHELF_OPTIONS.includes(code)) return "Each split location must be a valid A1-D6 shelf.";
+      if (!Number.isInteger(count) || count < 1) {
+        return "Each split location count must be an integer greater than or equal to 1.";
+      }
+    }
+
+    if (splitRowsTotal !== targetAvailableForEdit) {
+      return `Split rows total is ${splitRowsTotal}, but available copies is ${targetAvailableForEdit}. Adjust rows so they match.`;
+    }
+
+    return "";
+  })();
 
   const tabStyle = (t) => ({
     padding:"0.5rem 1.25rem", cursor:"pointer", border:"none",
@@ -438,10 +452,16 @@ export default function AdminPage() {
               </div>
               <div>
                 <label style={styles.label}>Location</label>
-                <select style={styles.modalInput} value={editForm.location_code}
+                <select
+                  style={{ ...styles.modalInput, ...(editLocationMode === "multi" ? styles.modalInputDisabled : {}) }}
+                  value={editForm.location_code}
+                  disabled={editLocationMode === "multi"}
                   onChange={e => setEditForm({...editForm, location_code: e.target.value})}>
                   {SHELF_OPTIONS.map(loc => <option key={loc} value={loc}>{loc}</option>)}
                 </select>
+                {editLocationMode === "multi" && (
+                  <p style={styles.locationHintMuted}>Disabled in split mode. Set locations using rows below.</p>
+                )}
               </div>
               <div>
                 <label style={styles.label}>Description</label>
@@ -507,15 +527,16 @@ export default function AdminPage() {
 
                   <button type="button" style={styles.btnSecondary} onClick={addEditLocationRow}>Add Location Row</button>
                   <p style={styles.locationHint}>
-                    Split rows must total available copies only.
+                    Checked out: {checkedOutForEdit} • Available to place: {targetAvailableForEdit} • Split total: {splitRowsTotal}
                   </p>
+                  {splitValidationMessage && <p style={styles.locationError}>{splitValidationMessage}</p>}
                 </div>
               )}
             </div>
 
             <div style={{display:"flex", gap:"0.5rem", justifyContent:"flex-end"}}>
               <button style={{...styles.btn, background:"#888"}} onClick={() => setEditingBook(null)}>Cancel</button>
-              <button style={styles.btn} onClick={handleSaveEdit}>Save Changes</button>
+              <button style={styles.btn} onClick={handleSaveEdit} disabled={editLocationMode === "multi" && !!splitValidationMessage}>Save Changes</button>
             </div>
           </div>
         </div>
@@ -622,11 +643,14 @@ const styles = {
   modalOverlay: { position:"fixed", top:0, left:0, right:0, bottom:0, background:"rgba(0,0,0,0.5)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:1000 },
   modalContent: { background:"#fff", borderRadius:"10px", padding:"2rem", maxWidth:"600px", width:"90vw", maxHeight:"90vh", overflowY:"auto", boxShadow:"0 20px 60px rgba(0,0,0,0.3)" },
   modalInput: { width:"100%", padding:"0.55rem 0.75rem", border:"1px solid #ccc", borderRadius:"4px", fontSize:"0.95rem", boxSizing:"border-box" },
+  modalInputDisabled: { background:"#f3f4f6", color:"#6b7280", cursor:"not-allowed" },
   locationModeWrap: { marginBottom:"1rem", borderTop:"1px solid #eee", paddingTop:"1rem", display:"grid", gap:"0.5rem" },
   radioLabel: { display:"flex", alignItems:"center", gap:"0.5rem", fontSize:"0.92rem", color:"#333" },
   locationRowsWrap: { display:"grid", gap:"0.5rem", marginTop:"0.25rem" },
   locationRow: { display:"grid", gridTemplateColumns:"1fr 120px auto", gap:"0.5rem", alignItems:"center" },
   locationHint: { margin:"0.1rem 0 0", color:"#666", fontSize:"0.82rem" },
+  locationHintMuted: { margin:"0.35rem 0 0", color:"#6b7280", fontSize:"0.78rem" },
+  locationError: { margin:"0.2rem 0 0", color:"#b91c1c", fontSize:"0.82rem", fontWeight:"600" },
   table:     { width:"100%", borderCollapse:"collapse" },
   header:    { background:"#f0f4f8", textAlign:"left" },
   row:       { borderBottom:"1px solid #eee" },
