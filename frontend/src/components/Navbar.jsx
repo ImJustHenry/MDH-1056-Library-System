@@ -61,7 +61,6 @@ export default function Navbar() {
                         <Link to="/dashboard" style={s.mobileLink}>Dashboard</Link>
                       </>
                     )}
-                    <div style={s.mobileDivider} />
                     <span style={s.mobileEmail}>{user.email}</span>
                     <button onClick={handleLogout} style={s.mobileLogout}>Sign out</button>
                   </>
@@ -157,7 +156,6 @@ const s = {
   mobileLink:  { display:"block", color:"rgba(255,255,255,.88)", textDecoration:"none",
                  fontSize:"0.95rem", fontWeight:500, padding:"0.85rem 1.5rem",
                  borderBottom:"1px solid rgba(255,255,255,.06)" },
-  mobileDivider: { height:1, background:"rgba(255,255,255,.12)", margin:"0.5rem 0" },
   mobileEmail:   { display:"block", fontSize:"0.78rem", color:"rgba(255,255,255,.45)",
                    padding:"0.4rem 1.5rem" },
   mobileLogout:  { margin:"0.5rem 1.5rem 0", padding:"0.65rem 1rem",
