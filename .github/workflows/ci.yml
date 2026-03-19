@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - "**"
+  workflow_dispatch:
+
+jobs:
+  backend:
+    name: Backend checks
+    runs-on: ubuntu-latest
+    services:
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand(\"ping\").ok' || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
+
+    env:
+      MONGO_URI: mongodb://localhost:27017/library_ci
+      JWT_SECRET: ci-jwt-secret
+      JWT_EXPIRY_HOURS: "24"
+      ALLOWED_EMAIL_DOMAIN: slu.edu
+      ADMIN_EMAILS: admin@slu.edu
+      FRONTEND_URL: http://localhost:5173
+      CORS_ORIGIN: http://localhost:5173
+      RECAPTCHA_SECRET: ""
+      MAIL_FROM: ci@example.com
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: pip install -r requirements.txt
+
+      - name: Create indexes
+        working-directory: backend
+        run: python -m scripts.init_db
+
+      - name: Syntax check backend
+        working-directory: backend
+        run: python -m compileall app
+
+      - name: Verify DB connectivity and /api/health
+        working-directory: backend
+        run: |
+          python - <<'PY'
+          from app import create_app
+          from app.db import get_db
+
+          app = create_app()
+
+          with app.app_context():
+              db = get_db()
+              db.command("ping")
+
+          client = app.test_client()
+          response = client.get("/api/health")
+          assert response.status_code == 200, response.get_data(as_text=True)
+          print("Backend DB ping + health endpoint passed.")
+          PY
+
+  frontend:
+    name: Frontend build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build

@@ -50,7 +50,33 @@ export default function AdminPage() {
       setMsg("Book added successfully.");
       setForm({ title:"", author:"", isbn:"", total_copies:1, location_code:"A1" });
       fetchBooks();
-    } catch (err) { setError(err.response?.data?.error || "Failed to add book."); }
+    } catch (err) {
+      if (err.response?.status === 409 && /isbn/i.test(err.response?.data?.error || "")) {
+        setError("There is duplicate ISBN.");
+      } else {
+        setError(err.response?.data?.error || "Failed to add book.");
+      }
+    }
+  };
+
+  const handleEditStock = async (book) => {
+    setError(""); setMsg("");
+    const nextRaw = window.prompt(`Set total copies for "${book.title}"`, String(book.total_copies ?? 1));
+    if (nextRaw === null) return;
+
+    const nextTotal = Number(nextRaw);
+    if (!Number.isInteger(nextTotal) || nextTotal < 1) {
+      setError("Stock must be an integer greater than or equal to 1.");
+      return;
+    }
+
+    try {
+      await api.put(`/books/${book.id}`, { total_copies: nextTotal });
+      setMsg(`Stock updated for "${book.title}".`);
+      fetchBooks();
+    } catch (err) {
+      setError(err.response?.data?.error || "Failed to update stock.");
+    }
   };
 
   const handleDelete = async (id, title) => {
@@ -186,8 +212,12 @@ export default function AdminPage() {
                     </span>
                   </td>
                   <td>
-                    <button style={styles.btnDanger}
-                      onClick={() => handleDelete(b.id, b.title)}>Delete</button>
+                    <div style={styles.rowActions}>
+                      <button style={styles.btnSecondary}
+                        onClick={() => handleEditStock(b)}>Edit Stock</button>
+                      <button style={styles.btnDanger}
+                        onClick={() => handleDelete(b.id, b.title)}>Delete</button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -370,8 +400,11 @@ const styles = {
                fontSize:"0.95rem", flex:1, minWidth:"160px" },
   btn:       { padding:"0.5rem 1rem", background:"#003087", color:"#fff",
                border:"none", borderRadius:"4px", cursor:"pointer" },
+  btnSecondary: { padding:"0.35rem 0.75rem", background:"#1f2937", color:"#fff",
+               border:"none", borderRadius:"4px", cursor:"pointer", fontSize:"0.85rem" },
   btnDanger: { padding:"0.35rem 0.75rem", background:"#c00", color:"#fff",
                border:"none", borderRadius:"4px", cursor:"pointer", fontSize:"0.85rem" },
+  rowActions: { display:"flex", gap:"0.45rem", justifyContent:"flex-end" },
   table:     { width:"100%", borderCollapse:"collapse" },
   header:    { background:"#f0f4f8", textAlign:"left" },
   row:       { borderBottom:"1px solid #eee" },

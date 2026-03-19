@@ -30,6 +30,10 @@ def _normalize_location(location_code: str) -> str:
     return code
 
 
+def _normalize_isbn(isbn_value: str) -> str:
+    return (isbn_value or "").strip().replace("-", "").replace(" ", "").upper()
+
+
 def _normalize_location_counts(raw_counts) -> dict:
     if not isinstance(raw_counts, dict):
         return {}
@@ -140,8 +144,16 @@ def add_book():
     db = get_db()
 
     isbn = data.get("isbn", "").strip()
-    if isbn and db.books.find_one({"isbn": isbn}):
-        return jsonify({"error": "A book with that ISBN already exists."}), 409
+    isbn_normalized = _normalize_isbn(isbn)
+    if isbn_normalized:
+        existing = db.books.find_one({
+            "$or": [
+                {"isbn_normalized": isbn_normalized},
+                {"isbn": isbn},
+            ]
+        })
+        if existing:
+            return jsonify({"error": "There is duplicate ISBN."}), 409
 
     now = datetime.datetime.utcnow()
     location_counts = _normalize_location_counts(data.get("location_counts", {}))
@@ -154,6 +166,7 @@ def add_book():
         "title":            title,
         "author":           author,
         "isbn":             isbn,
+        "isbn_normalized":  isbn_normalized,
         "location_code":    location_code,
         "location_counts":  location_counts,
         "description":      data.get("description", "").strip(),
@@ -203,8 +216,30 @@ def edit_book(book_id):
         if new_total < 1:
             return jsonify({"error": "total_copies must be at least 1."}), 400
         checked_out = book["total_copies"] - book["available_copies"]
+        if new_total < checked_out:
+            return jsonify({"error": f"Cannot set total_copies below checked-out count ({checked_out})."}), 400
         updates["available_copies"] = max(0, new_total - checked_out)
         updates["total_copies"]     = new_total
+
+    if "isbn" in updates:
+        raw_isbn = (updates.get("isbn") or "").strip()
+        normalized_isbn = _normalize_isbn(raw_isbn)
+        if normalized_isbn:
+            duplicate = db.books.find_one({
+                "$and": [
+                    {"_id": {"$ne": oid}},
+                    {
+                        "$or": [
+                            {"isbn_normalized": normalized_isbn},
+                            {"isbn": raw_isbn},
+                        ]
+                    },
+                ]
+            })
+            if duplicate:
+                return jsonify({"error": "There is duplicate ISBN."}), 409
+        updates["isbn"] = raw_isbn
+        updates["isbn_normalized"] = normalized_isbn
 
     if "location_counts" in updates:
         normalized_counts = _normalize_location_counts(updates["location_counts"])
