@@ -13,6 +13,10 @@ export default function AdminPage() {
   // Add book form
   const [form, setForm] = useState({ title:"", author:"", isbn:"", total_copies:1, location_code:"A1" });
 
+  // Edit book modal
+  const [editingBook,  setEditingBook]  = useState(null);
+  const [editForm,     setEditForm]     = useState({});
+
   // Admin checkout form
   const [selectedBooks, setSelectedBooks] = useState([]);   // [{id, title, author}]
   const [userEmail,     setUserEmail]     = useState("");
@@ -59,23 +63,48 @@ export default function AdminPage() {
     }
   };
 
-  const handleEditStock = async (book) => {
+  const handleEditBook = (book) => {
     setError(""); setMsg("");
-    const nextRaw = window.prompt(`Set total copies for "${book.title}"`, String(book.total_copies ?? 1));
-    if (nextRaw === null) return;
+    setEditingBook(book);
+    setEditForm({
+      title: book.title,
+      author: book.author,
+      isbn: book.isbn || "",
+      total_copies: book.total_copies,
+      location_code: book.location_code,
+      description: book.description || "",
+    });
+  };
 
-    const nextTotal = Number(nextRaw);
-    if (!Number.isInteger(nextTotal) || nextTotal < 1) {
+  const handleSaveEdit = async () => {
+    setError(""); setMsg("");
+    if (!editForm.title || !editForm.author) {
+      setError("Title and author are required.");
+      return;
+    }
+    if (!Number.isInteger(Number(editForm.total_copies)) || Number(editForm.total_copies) < 1) {
       setError("Stock must be an integer greater than or equal to 1.");
       return;
     }
-
     try {
-      await api.put(`/books/${book.id}`, { total_copies: nextTotal });
-      setMsg(`Stock updated for "${book.title}".`);
+      await api.put(`/books/${editingBook.id}`, {
+        title: editForm.title,
+        author: editForm.author,
+        isbn: editForm.isbn,
+        total_copies: Number(editForm.total_copies),
+        location_code: editForm.location_code,
+        description: editForm.description,
+      });
+      setMsg("Book updated successfully.");
+      setEditingBook(null);
+      setEditForm({});
       fetchBooks();
     } catch (err) {
-      setError(err.response?.data?.error || "Failed to update stock.");
+      if (err.response?.status === 409 && /isbn/i.test(err.response?.data?.error || "")) {
+        setError("There is duplicate ISBN.");
+      } else {
+        setError(err.response?.data?.error || "Failed to update book.");
+      }
     }
   };
 
@@ -214,7 +243,7 @@ export default function AdminPage() {
                   <td>
                     <div style={styles.rowActions}>
                       <button style={styles.btnSecondary}
-                        onClick={() => handleEditStock(b)}>Edit Stock</button>
+                        onClick={() => handleEditBook(b)}>Edit</button>
                       <button style={styles.btnDanger}
                         onClick={() => handleDelete(b.id, b.title)}>Delete</button>
                     </div>
@@ -306,6 +335,53 @@ export default function AdminPage() {
             </div>
           </form>
         </>
+      )}
+
+      {/* ── EDIT MODAL ────────────────────────────────────────────── */}
+      {editingBook && (
+        <div style={styles.modalOverlay} onClick={() => setEditingBook(null)}>
+          <div style={styles.modalContent} onClick={e => e.stopPropagation()}>
+            <h3 style={{margin:"0 0 1rem"}}>Edit Book: {editingBook.title}</h3>
+            <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:"0.75rem", marginBottom:"1rem"}}>
+              <div>
+                <label style={styles.label}>Title</label>
+                <input style={styles.modalInput} type="text" value={editForm.title}
+                  onChange={e => setEditForm({...editForm, title: e.target.value})} />
+              </div>
+              <div>
+                <label style={styles.label}>Author</label>
+                <input style={styles.modalInput} type="text" value={editForm.author}
+                  onChange={e => setEditForm({...editForm, author: e.target.value})} />
+              </div>
+              <div>
+                <label style={styles.label}>ISBN</label>
+                <input style={styles.modalInput} type="text" value={editForm.isbn}
+                  onChange={e => setEditForm({...editForm, isbn: e.target.value})} />
+              </div>
+              <div>
+                <label style={styles.label}>Total Copies</label>
+                <input style={styles.modalInput} type="number" min="1" value={editForm.total_copies}
+                  onChange={e => setEditForm({...editForm, total_copies: e.target.value})} />
+              </div>
+              <div>
+                <label style={styles.label}>Location</label>
+                <select style={styles.modalInput} value={editForm.location_code}
+                  onChange={e => setEditForm({...editForm, location_code: e.target.value})}>
+                  {SHELF_OPTIONS.map(loc => <option key={loc} value={loc}>{loc}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={styles.label}>Description</label>
+                <input style={styles.modalInput} type="text" value={editForm.description}
+                  onChange={e => setEditForm({...editForm, description: e.target.value})} />
+              </div>
+            </div>
+            <div style={{display:"flex", gap:"0.5rem", justifyContent:"flex-end"}}>
+              <button style={{...styles.btn, background:"#888"}} onClick={() => setEditingBook(null)}>Cancel</button>
+              <button style={styles.btn} onClick={handleSaveEdit}>Save Changes</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ── CHECKOUTS TAB ────────────────────────────────────────────── */}
@@ -405,6 +481,10 @@ const styles = {
   btnDanger: { padding:"0.35rem 0.75rem", background:"#c00", color:"#fff",
                border:"none", borderRadius:"4px", cursor:"pointer", fontSize:"0.85rem" },
   rowActions: { display:"flex", gap:"0.45rem", justifyContent:"flex-end" },
+  label: { display:"block", marginBottom:"0.25rem", fontWeight:"600", fontSize:"0.9rem", color:"#333" },
+  modalOverlay: { position:"fixed", top:0, left:0, right:0, bottom:0, background:"rgba(0,0,0,0.5)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:1000 },
+  modalContent: { background:"#fff", borderRadius:"10px", padding:"2rem", maxWidth:"600px", width:"90vw", maxHeight:"90vh", overflowY:"auto", boxShadow:"0 20px 60px rgba(0,0,0,0.3)" },
+  modalInput: { width:"100%", padding:"0.55rem 0.75rem", border:"1px solid #ccc", borderRadius:"4px", fontSize:"0.95rem", boxSizing:"border-box" },
   table:     { width:"100%", borderCollapse:"collapse" },
   header:    { background:"#f0f4f8", textAlign:"left" },
   row:       { borderBottom:"1px solid #eee" },
