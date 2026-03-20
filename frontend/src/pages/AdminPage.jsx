@@ -92,7 +92,11 @@ export default function AdminPage() {
   };
 
   const fetchGoogleBookByIsbn = async (isbn) => {
-    const { data } = await api.get(`https://www.googleapis.com/books/v1/volumes?q=isbn:${encodeURIComponent(isbn)}`);
+    const response = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${encodeURIComponent(isbn)}`);
+    if (!response.ok) {
+      throw new Error("Failed to fetch Google Books data.");
+    }
+    const data = await response.json();
     const first = data?.items?.[0]?.volumeInfo;
     if (!first) return null;
     return {
