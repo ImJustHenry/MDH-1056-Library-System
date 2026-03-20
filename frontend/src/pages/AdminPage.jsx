@@ -94,7 +94,7 @@ export default function AdminPage() {
   const fetchGoogleBookByIsbn = async (isbn) => {
     const response = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${encodeURIComponent(isbn)}`);
     if (!response.ok) {
-      throw new Error("Failed to fetch Google Books data.");
+      throw new Error(`Google Books lookup failed (${response.status}).`);
     }
     const data = await response.json();
     const first = data?.items?.[0]?.volumeInfo;
@@ -122,10 +122,25 @@ export default function AdminPage() {
   };
 
   const addBookFromBarcode = async (barcode) => {
-    const details = await fetchGoogleBookByIsbn(barcode);
+    let details = null;
+    try {
+      details = await fetchGoogleBookByIsbn(barcode);
+    } catch {
+      details = null;
+    }
+
     if (!details?.title || !details?.author) {
-      setError("Google Books did not return complete title/author for this barcode.");
-      return;
+      const title = window.prompt("Could not fetch full book details from Google Books. Enter title:", `Scanned Book ${barcode}`);
+      if (title === null) return;
+      const author = window.prompt("Enter author:", "Unknown Author");
+      if (author === null) return;
+      details = {
+        title: String(title).trim(),
+        author: String(author).trim(),
+      };
+      if (!details.title || !details.author) {
+        throw new Error("Title and author are required to add scanned book.");
+      }
     }
 
     const payload = {
@@ -195,7 +210,7 @@ export default function AdminPage() {
         }
         setError("There is duplicate ISBN.");
       } else {
-        setError(err.response?.data?.error || "Failed to add scanned book.");
+        setError(err.response?.data?.error || err.message || "Failed to add scanned book.");
       }
     }
   };
