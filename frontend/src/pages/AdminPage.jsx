@@ -182,13 +182,20 @@ export default function AdminPage() {
     await fetchBooks();
   };
 
-  const addBookFromBarcode = async (barcode, canonicalIsbn) => {
+  const addBookFromBarcode = async (barcode, canonicalIsbn, skipDuplicateConfirm = false) => {
     const isbnToStore = canonicalIsbn || barcode;
 
     const existing = await findExistingBookByIsbn(isbnToStore);
     if (existing) {
+      if (!skipDuplicateConfirm) {
+        const proceed = window.confirm("This ISBN has been scanned before. Do you want to add 1 more stock copy?");
+        if (!proceed) {
+          setMsg("Duplicate ISBN skipped.");
+          return false;
+        }
+      }
       await addCopyToExistingBook(existing);
-      return;
+      return true;
     }
 
     let details = null;
@@ -232,6 +239,7 @@ export default function AdminPage() {
     setForm((prev) => ({ ...prev, title: details.title, author: details.author, isbn: isbnToStore, total_copies: 1 }));
     setMsg(`Added "${details.title}" by ${details.author} from barcode.`);
     await fetchBooks();
+    return true;
   };
 
   const handleBarcodeDetected = async (rawValue) => {
@@ -249,9 +257,9 @@ export default function AdminPage() {
     const alreadyScanned = scannedBarcodes.includes(isbnForMatching);
 
     if (existing || alreadyScanned) {
-      const proceed = window.confirm("The same barcode has been scanned before. Do you want to add another copy?");
+      const proceed = window.confirm("This ISBN has been scanned before. Do you want to add 1 more stock copy?");
       if (!proceed) {
-        setMsg("Duplicate barcode skipped.");
+        setMsg("Duplicate ISBN skipped.");
         return;
       }
 
@@ -269,13 +277,15 @@ export default function AdminPage() {
     }
 
     try {
-      await addBookFromBarcode(barcode, canonicalIsbn);
-      setScannedBarcodes((prev) => (prev.includes(isbnForMatching) ? prev : [...prev, isbnForMatching]));
+      const didAdd = await addBookFromBarcode(barcode, canonicalIsbn, alreadyScanned);
+      if (didAdd) {
+        setScannedBarcodes((prev) => (prev.includes(isbnForMatching) ? prev : [...prev, isbnForMatching]));
+      }
     } catch (err) {
       if (err.response?.status === 409 && /isbn/i.test(err.response?.data?.error || "")) {
         const matched = await findExistingBookByIsbn(isbnForMatching);
         if (matched) {
-          const proceed = window.confirm("This barcode already exists. Add another copy instead?");
+          const proceed = window.confirm("This ISBN has been scanned before. Do you want to add 1 more stock copy?");
           if (proceed) {
             try {
               await addCopyToExistingBook(matched);
