@@ -113,6 +113,21 @@ export default function AdminPage() {
     return books.find((book) => normalizeIsbn(book.isbn) === normalized) || null;
   };
 
+  const findExistingBookByIsbn = async (isbn) => {
+    const normalized = normalizeIsbn(isbn);
+    if (!normalized) return null;
+
+    const localMatch = books.find((book) => normalizeIsbn(book.isbn) === normalized);
+    if (localMatch) return localMatch;
+
+    try {
+      const { data } = await api.get("/books");
+      return data.find((book) => normalizeIsbn(book.isbn) === normalized) || null;
+    } catch {
+      return null;
+    }
+  };
+
   const stopScanner = () => {
     if (rafRef.current) {
       cancelAnimationFrame(rafRef.current);
@@ -169,6 +184,13 @@ export default function AdminPage() {
 
   const addBookFromBarcode = async (barcode, canonicalIsbn) => {
     const isbnToStore = canonicalIsbn || barcode;
+
+    const existing = await findExistingBookByIsbn(isbnToStore);
+    if (existing) {
+      await addCopyToExistingBook(existing);
+      return;
+    }
+
     let details = null;
     try {
       if (canonicalIsbn) {
@@ -223,7 +245,7 @@ export default function AdminPage() {
     stopScanner();
     setShowScanner(false);
 
-    const existing = getBookByIsbn(isbnForMatching);
+    const existing = await findExistingBookByIsbn(isbnForMatching);
     const alreadyScanned = scannedBarcodes.includes(isbnForMatching);
 
     if (existing || alreadyScanned) {
@@ -251,7 +273,7 @@ export default function AdminPage() {
       setScannedBarcodes((prev) => (prev.includes(isbnForMatching) ? prev : [...prev, isbnForMatching]));
     } catch (err) {
       if (err.response?.status === 409 && /isbn/i.test(err.response?.data?.error || "")) {
-        const matched = getBookByIsbn(isbnForMatching);
+        const matched = await findExistingBookByIsbn(isbnForMatching);
         if (matched) {
           const proceed = window.confirm("This barcode already exists. Add another copy instead?");
           if (proceed) {
