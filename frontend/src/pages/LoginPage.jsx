@@ -10,6 +10,8 @@ export default function LoginPage() {
   const navigate   = useNavigate();
   const captchaRef = useRef(null);
   const [isPhone, setIsPhone] = useState(window.innerWidth <= 420);
+  const [captchaRenderKey, setCaptchaRenderKey] = useState(0);
+  const [captchaLoadError, setCaptchaLoadError] = useState("");
 
   useEffect(() => {
     const onResize = () => setIsPhone(window.innerWidth <= 420);
@@ -47,6 +49,12 @@ export default function LoginPage() {
     }
   };
 
+  const handleRetryCaptcha = () => {
+    setCaptchaLoadError("");
+    setCaptchaToken("");
+    setCaptchaRenderKey(prev => prev + 1);
+  };
+
   return (
     <div style={styles.wrapper}>
       <div style={styles.card(isPhone)}>
@@ -66,14 +74,27 @@ export default function LoginPage() {
             onChange={e => setPassword(e.target.value)}
             autoComplete="current-password" />
 
-          <div style={styles.captchaWrap}>
-            <ReCAPTCHA
-              ref={captchaRef}
-              sitekey={SITE_KEY}
-              size={isPhone ? "compact" : "normal"}
-              onChange={token => setCaptchaToken(token || "")}
-              onExpired={() => setCaptchaToken("")}
-            />
+          <div style={styles.captchaShell}>
+            <div style={styles.captchaWrap}>
+              <ReCAPTCHA
+                key={`${isPhone ? "phone" : "desktop"}-${captchaRenderKey}`}
+                ref={captchaRef}
+                sitekey={SITE_KEY}
+                size={isPhone ? "compact" : "normal"}
+                onChange={token => setCaptchaToken(token || "")}
+                onExpired={() => setCaptchaToken("")}
+                onErrored={() => {
+                  setCaptchaToken("");
+                  setCaptchaLoadError("CAPTCHA failed to load on this network/browser. Tap Retry.");
+                }}
+              />
+            </div>
+            {captchaLoadError && (
+              <div style={styles.captchaErrorRow}>
+                <span style={styles.captchaErrorText}>{captchaLoadError}</span>
+                <button type="button" style={styles.retryBtn} onClick={handleRetryCaptcha}>Retry</button>
+              </div>
+            )}
           </div>
 
           <button style={styles.btn} disabled={loading} onClick={handleSubmit}>
@@ -104,7 +125,12 @@ const styles = {
              boxSizing:"border-box" },
   btn:     { width:"100%", padding:"0.75rem", background:"#003087", color:"#fff",
              border:"none", borderRadius:"4px", fontSize:"1rem", cursor:"pointer" },
+  retryBtn: { padding:"0.35rem 0.7rem", background:"#fff", color:"#003087",
+             border:"1px solid #003087", borderRadius:"4px", fontSize:"0.82rem", cursor:"pointer" },
+  captchaShell: { marginBottom:"1rem", minHeight:"84px" },
   captchaWrap: { marginBottom:"1rem", display:"flex", justifyContent:"center" },
+  captchaErrorRow: { marginTop:"0.4rem", display:"flex", alignItems:"center", justifyContent:"space-between", gap:"0.5rem" },
+  captchaErrorText: { color:"#b91c1c", fontSize:"0.8rem", lineHeight:1.3 },
   error:   { background:"#ffeaea", color:"#c00", padding:"0.6rem 0.75rem",
              borderRadius:"4px", marginBottom:"1rem", fontSize:"0.9rem" },
   footer:  { textAlign:"center", marginTop:"1rem", fontSize:"0.9rem" },

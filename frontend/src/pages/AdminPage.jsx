@@ -21,6 +21,8 @@ export default function AdminPage() {
   const streamRef = useRef(null);
   const rafRef = useRef(null);
   const detectorRef = useRef(null);
+  const zxingReaderRef = useRef(null);
+  const zxingControlsRef = useRef(null);
   const scanLockRef = useRef(false);
 
   // Edit book modal
@@ -77,6 +79,14 @@ export default function AdminPage() {
     }
     if (videoRef.current) {
       videoRef.current.srcObject = null;
+    }
+    if (zxingControlsRef.current?.stop) {
+      zxingControlsRef.current.stop();
+      zxingControlsRef.current = null;
+    }
+    if (zxingReaderRef.current?.reset) {
+      zxingReaderRef.current.reset();
+      zxingReaderRef.current = null;
     }
     scanLockRef.current = false;
   };
@@ -192,54 +202,82 @@ export default function AdminPage() {
       setScannerError("Camera is not available on this device/browser.");
       return;
     }
-    if (!("BarcodeDetector" in window)) {
-      setScannerError("Barcode scanning is not supported in this browser. Try Chrome on Android.");
-      return;
-    }
 
     try {
-      const formats = ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "code_39", "itf"];
-      detectorRef.current = new window.BarcodeDetector({ formats });
+      if ("BarcodeDetector" in window) {
+        const formats = ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "code_39", "itf"];
+        detectorRef.current = new window.BarcodeDetector({ formats });
 
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: "environment" },
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        },
-        audio: false,
-      });
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+          audio: false,
+        });
 
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-      }
-
-      const tick = async () => {
-        if (!showScanner || !videoRef.current || !detectorRef.current) return;
-
-        try {
-          if (!scanLockRef.current) {
-            const detected = await detectorRef.current.detect(videoRef.current);
-            if (detected?.length) {
-              const raw = detected[0]?.rawValue || "";
-              const cleaned = normalizeIsbn(raw);
-              if (cleaned.length >= 8) {
-                scanLockRef.current = true;
-                await handleBarcodeDetected(cleaned);
-                return;
-              }
-            }
-          }
-        } catch {
-          // Ignore per-frame detection issues.
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play();
         }
 
-        rafRef.current = requestAnimationFrame(tick);
-      };
+        const tick = async () => {
+          if (!showScanner || !videoRef.current || !detectorRef.current) return;
 
-      rafRef.current = requestAnimationFrame(tick);
+          try {
+            if (!scanLockRef.current) {
+              const detected = await detectorRef.current.detect(videoRef.current);
+              if (detected?.length) {
+                const raw = detected[0]?.rawValue || "";
+                const cleaned = normalizeIsbn(raw);
+                if (cleaned.length >= 8) {
+                  scanLockRef.current = true;
+                  await handleBarcodeDetected(cleaned);
+                  return;
+                }
+              }
+            }
+          } catch {
+            // Ignore per-frame detection issues.
+          }
+
+          rafRef.current = requestAnimationFrame(tick);
+        };
+
+        rafRef.current = requestAnimationFrame(tick);
+        return;
+      }
+
+      if (!videoRef.current) {
+        setScannerError("Scanner preview failed to initialize.");
+        return;
+      }
+
+      const { BrowserMultiFormatReader } = await import("@zxing/browser");
+      const reader = new BrowserMultiFormatReader();
+      zxingReaderRef.current = reader;
+      const controls = await reader.decodeFromConstraints(
+        {
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+        },
+        videoRef.current,
+        async (result) => {
+          if (scanLockRef.current) return;
+          const raw = result?.getText?.() || "";
+          const cleaned = normalizeIsbn(raw);
+          if (cleaned.length >= 8) {
+            scanLockRef.current = true;
+            await handleBarcodeDetected(cleaned);
+          }
+        }
+      );
+      zxingControlsRef.current = controls;
     } catch (err) {
       setScannerError(err?.message || "Unable to start camera scanner.");
       stopScanner();
