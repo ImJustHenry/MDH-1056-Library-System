@@ -10,6 +10,7 @@ export default function LoginPage() {
   const navigate   = useNavigate();
   const captchaRef = useRef(null);
   const [isPhone, setIsPhone] = useState(window.innerWidth <= 420);
+  const isInvisibleCaptcha = isPhone;
   const [captchaRenderKey, setCaptchaRenderKey] = useState(0);
   const [captchaLoadError, setCaptchaLoadError] = useState("");
 
@@ -27,13 +28,27 @@ export default function LoginPage() {
 
   const handleSubmit = async () => {
     setError("");
-    if (!captchaToken) {
+
+    setLoading(true);
+
+    let tokenToUse = captchaToken;
+    if (!tokenToUse && isInvisibleCaptcha) {
+      try {
+        tokenToUse = await captchaRef.current?.executeAsync();
+        setCaptchaToken(tokenToUse || "");
+      } catch {
+        tokenToUse = "";
+      }
+    }
+
+    if (!tokenToUse) {
+      setLoading(false);
       setError("Please complete the CAPTCHA.");
       return;
     }
-    setLoading(true);
+
     try {
-      const loggedInUser = await login(email, password, captchaToken);
+      const loggedInUser = await login(email, password, tokenToUse);
       navigate(loggedInUser.role === "admin" ? "/dashboard" : "/books", { replace: true });
     } catch (err) {
       // reset captcha so user must solve it again
@@ -80,7 +95,8 @@ export default function LoginPage() {
                 key={`${isPhone ? "phone" : "desktop"}-${captchaRenderKey}`}
                 ref={captchaRef}
                 sitekey={SITE_KEY}
-                size={isPhone ? "compact" : "normal"}
+                size={isInvisibleCaptcha ? "invisible" : "normal"}
+                badge={isInvisibleCaptcha ? "bottomright" : undefined}
                 onChange={token => setCaptchaToken(token || "")}
                 onExpired={() => setCaptchaToken("")}
                 onErrored={() => {
@@ -89,6 +105,11 @@ export default function LoginPage() {
                 }}
               />
             </div>
+            {isInvisibleCaptcha && !captchaLoadError && (
+              <div style={styles.mobileCaptchaHint}>
+                Human verification runs after tapping Sign In.
+              </div>
+            )}
             {captchaLoadError && (
               <div style={styles.captchaErrorRow}>
                 <span style={styles.captchaErrorText}>{captchaLoadError}</span>
@@ -129,6 +150,7 @@ const styles = {
              border:"1px solid #003087", borderRadius:"4px", fontSize:"0.82rem", cursor:"pointer" },
   captchaShell: { marginBottom:"1rem", minHeight:"84px" },
   captchaWrap: { marginBottom:"1rem", display:"flex", justifyContent:"center" },
+  mobileCaptchaHint: { marginTop:"-0.2rem", marginBottom:"0.4rem", color:"#4b5563", fontSize:"0.8rem", textAlign:"center" },
   captchaErrorRow: { marginTop:"0.4rem", display:"flex", alignItems:"center", justifyContent:"space-between", gap:"0.5rem" },
   captchaErrorText: { color:"#b91c1c", fontSize:"0.8rem", lineHeight:1.3 },
   error:   { background:"#ffeaea", color:"#c00", padding:"0.6rem 0.75rem",
