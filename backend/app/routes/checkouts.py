@@ -49,24 +49,38 @@ def _normalize_location_counts(raw_counts) -> dict:
     return normalized
 
 
-def _pick_checkout_location(book: dict) -> tuple[str, dict]:
+def _pick_checkout_location(book: dict, preferred_location: str = "") -> tuple[str, dict, str]:
     counts = _normalize_location_counts(book.get("location_counts", {}))
+    preferred = _normalize_location(preferred_location)
+
+    if preferred:
+        if counts:
+            if counts.get(preferred, 0) > 0:
+                return preferred, counts, ""
+            return "", counts, f"No available copy at shelf {preferred}."
+
+        fallback = _normalize_location(book.get("location_code", ""))
+        available = int(book.get("available_copies", 0) or 0)
+        if fallback == preferred and available > 0:
+            return preferred, {preferred: available}, ""
+        return "", {}, f"No available copy at shelf {preferred}."
+
     if counts:
         # Prefer slots with more available copies, then deterministic by code.
         code = sorted(counts.keys(), key=lambda key: (-counts[key], key))[0]
-        return code, counts
+        return code, counts, ""
 
     fallback = _normalize_location(book.get("location_code", ""))
     if fallback:
-        return fallback, {fallback: int(book.get("available_copies", 0) or 0)}
+        return fallback, {fallback: int(book.get("available_copies", 0) or 0)}, ""
 
     # Backward-compatibility for legacy rows that predate shelf labeling.
     # Treat as A1 so existing inventories remain check-outable.
     available = int(book.get("available_copies", 0) or 0)
     if available > 0:
-        return "A1", {"A1": available}
+        return "A1", {"A1": available}, ""
 
-    return "", {}
+    return "", {}, "Book has no valid shelf location configured."
 
 
 
@@ -93,7 +107,7 @@ def _log(db, action, user, book_id=None, book_title=None,
 
 
 def _do_checkout(db, book_id_str: str, user_id: str,
-                 user_email: str, performed_by) -> tuple:
+                 user_email: str, performed_by, preferred_location: str = "") -> tuple:
     """
     Core checkout logic shared by user self-checkout and admin-checkout.
     Returns (checkout_doc, error_tuple_or_None).
@@ -115,9 +129,9 @@ def _do_checkout(db, book_id_str: str, user_id: str,
         return None, ({"error": "Invalid user ID."}, 400)
 
     now = datetime.datetime.utcnow()
-    checkout_location, location_counts = _pick_checkout_location(book)
+    checkout_location, location_counts, location_err = _pick_checkout_location(book, preferred_location)
     if not checkout_location:
-        return None, ({"error": "Book has no valid shelf location configured."}, 409)
+        return None, ({"error": location_err or "Book has no valid shelf location configured."}, 409)
 
     location_counts[checkout_location] = max(0, location_counts.get(checkout_location, 0) - 1)
     if location_counts[checkout_location] == 0:
@@ -163,10 +177,11 @@ def _do_checkout(db, book_id_str: str, user_id: str,
 def checkout():
     data = request.get_json(silent=True) or {}
     book_id = data.get("book_id", "")
+    location_code = data.get("location_code", "")
     user    = request.user
 
     db = get_db()
-    doc, err = _do_checkout(db, book_id, user["sub"], user["email"], user)
+    doc, err = _do_checkout(db, book_id, user["sub"], user["email"], user, location_code)
     if err:
         return jsonify(err[0]), err[1]
 
@@ -191,6 +206,7 @@ def cart_checkout():
     errors = []
     for item in items:
         qty = max(1, int(item.get("quantity", 1)))
+        preferred_location = _normalize_location(item.get("location_code", ""))
         try:
             oid = ObjectId(item.get("book_id", ""))
         except Exception:
@@ -204,6 +220,16 @@ def cart_checkout():
             errors.append(
                 f'"{book["title"]}": only {avail} cop{"ies" if avail != 1 else "y"} available.'
             )
+        elif preferred_location:
+            counts = _normalize_location_counts(book.get("location_counts", {}))
+            if counts and counts.get(preferred_location, 0) < qty:
+                errors.append(
+                    f'"{book["title"]}": shelf {preferred_location} has only {counts.get(preferred_location, 0)} available.'
+                )
+            elif not counts:
+                fallback = _normalize_location(book.get("location_code", ""))
+                if fallback != preferred_location:
+                    errors.append(f'"{book["title"]}": shelf {preferred_location} is not available.')
     if errors:
         return jsonify({"error": "; ".join(errors)}), 409
 
@@ -212,8 +238,9 @@ def cart_checkout():
     failures = []
     for item in items:
         qty = max(1, int(item.get("quantity", 1)))
+        preferred_location = item.get("location_code", "")
         for _ in range(qty):
-            doc, err = _do_checkout(db, item["book_id"], user["sub"], user["email"], user)
+            doc, err = _do_checkout(db, item["book_id"], user["sub"], user["email"], user, preferred_location)
             if err:
                 failures.append(err[0].get("error", "Checkout failed."))
                 continue
@@ -242,6 +269,7 @@ def cart_checkout():
 def admin_checkout():
     data       = request.get_json(silent=True) or {}
     book_id    = data.get("book_id", "")
+    location_code = data.get("location_code", "")
     user_id    = data.get("user_id", "")
     user_email = data.get("user_email", "")
 
@@ -266,6 +294,7 @@ def admin_checkout():
         str(target["_id"]),
         target["email"],
         request.user,
+        location_code,
     )
     if err:
         return jsonify(err[0]), err[1]

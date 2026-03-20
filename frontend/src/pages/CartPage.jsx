@@ -4,7 +4,7 @@ import api from "../api/client";
 import { useCart } from "../context/CartContext";
 
 export default function CartPage() {
-  const { cart, removeFromCart, updateQuantity, clearCart, totalItems } = useCart();
+  const { cart, addToCart, removeFromCart, updateQuantity, clearCart, totalItems } = useCart();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState("");
@@ -20,13 +20,73 @@ export default function CartPage() {
       .join(", ");
   };
 
+  const promptCheckoutLocation = (item) => {
+    const counts = item.location_counts || {};
+    const entries = Object.entries(counts)
+      .filter(([, count]) => Number(count) > 0)
+      .sort(([left], [right]) => left.localeCompare(right));
+
+    if (entries.length <= 1) {
+      return entries[0]?.[0] || item.location_code || "A1";
+    }
+
+    const choices = entries.map(([code, count]) => `${code}:${count}`).join(", ");
+    const picked = window.prompt(
+      `"${item.title}" has multiple shelf locations.\nChoose where this cart copy will be checked out from.\nAvailable: ${choices}\n\nEnter location code (e.g., A1):`,
+      entries[0][0]
+    );
+
+    if (picked === null) return "";
+    const normalized = String(picked).trim().toUpperCase();
+    if (!entries.some(([code]) => code === normalized)) {
+      setError(`Invalid location for "${item.title}". Choose one of: ${choices}`);
+      return "";
+    }
+
+    return normalized;
+  };
+
+  const handleAddCopy = (item) => {
+    setError("");
+    const locationCode = promptCheckoutLocation(item);
+    if (!locationCode) return;
+    addToCart(item, locationCode);
+  };
+
   const handleCheckout = async () => {
     if (cart.length === 0) return;
     setError(""); setSuccess(""); setLoading(true);
 
-    const locationLines = cart.map((item) =>
-      `• ${item.title} (x${item.quantity}) → ${locationSummary(item)}`
-    );
+    const payload = [];
+    const chosenLines = [];
+
+    for (const item of cart) {
+      const selectedCounts = { ...(item.selected_location_counts || {}) };
+      const selectedTotal = Object.values(selectedCounts).reduce((sum, count) => sum + Number(count || 0), 0);
+
+      const fallback = item.location_code || "A1";
+      if (selectedTotal < item.quantity) {
+        selectedCounts[fallback] = Number(selectedCounts[fallback] || 0) + (item.quantity - selectedTotal);
+      }
+
+      const chosenEntries = Object.entries(selectedCounts)
+        .filter(([, count]) => Number(count) > 0)
+        .sort(([left], [right]) => left.localeCompare(right));
+
+      if (chosenEntries.length === 0) {
+        payload.push({ book_id: item.id, quantity: item.quantity, location_code: fallback });
+        chosenLines.push(`• ${item.title} (x${item.quantity}) → ${fallback}`);
+      } else {
+        chosenEntries.forEach(([code, count]) => {
+          payload.push({ book_id: item.id, quantity: Number(count), location_code: code });
+        });
+        chosenLines.push(`• ${item.title} (x${item.quantity}) → ${chosenEntries.map(([code, count]) => `${code}:${count}`).join(", ")}`);
+      }
+    }
+
+    const locationLines = chosenLines.length > 0
+      ? chosenLines
+      : cart.map((item) => `• ${item.title} (x${item.quantity}) → ${locationSummary(item)}`);
     const proceed = window.confirm(
       `Shelf locations for pickup:\n\n${locationLines.join("\n")}\n\nContinue checkout?`
     );
@@ -36,7 +96,6 @@ export default function CartPage() {
     }
 
     try {
-      const payload = cart.map(i => ({ book_id: i.id, quantity: i.quantity }));
       const { data } = await api.post("/checkouts/cart-checkout", payload);
       setSuccess(`${data.checked_out} book cop${data.checked_out !== 1 ? "ies" : "y"} checked out successfully!`);
       clearCart();
@@ -95,7 +154,7 @@ export default function CartPage() {
                       <span style={s.qtyNum}>{item.quantity}</span>
                       <button style={s.qtyBtn}
                         disabled={item.quantity >= item.available_copies}
-                        onClick={() => updateQuantity(item.id, item.quantity + 1)}>+</button>
+                        onClick={() => handleAddCopy(item)}>+</button>
                     </div>
                   </td>
                   <td style={{...s.td, textAlign:"center", color:"#555", fontSize:"0.85rem"}}>

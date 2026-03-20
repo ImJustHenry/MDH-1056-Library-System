@@ -29,6 +29,39 @@ export default function BooksPage() {
 
   const cartQty = (bookId) => cart.find(i => i.id === bookId)?.quantity || 0;
 
+  const promptCheckoutLocation = (book) => {
+    const counts = book.location_counts || {};
+    const entries = Object.entries(counts)
+      .filter(([, count]) => Number(count) > 0)
+      .sort(([left], [right]) => left.localeCompare(right));
+
+    if (entries.length <= 1) {
+      return entries[0]?.[0] || book.location_code || "A1";
+    }
+
+    const choices = entries.map(([code, count]) => `${code}:${count}`).join(", ");
+    const picked = window.prompt(
+      `"${book.title}" has multiple shelf locations.\nChoose where this cart copy will be checked out from.\nAvailable: ${choices}\n\nEnter location code (e.g., A1):`,
+      entries[0][0]
+    );
+
+    if (picked === null) return "";
+    const normalized = String(picked).trim().toUpperCase();
+    if (!entries.some(([code]) => code === normalized)) {
+      setError(`Invalid location for "${book.title}". Choose one of: ${choices}`);
+      return "";
+    }
+
+    return normalized;
+  };
+
+  const handleAddBookToCart = (book) => {
+    setError("");
+    const locationCode = promptCheckoutLocation(book);
+    if (!locationCode) return;
+    addToCart(book, locationCode);
+  };
+
   const locationSummary = (book) => {
     const counts = book.location_counts || {};
     const entries = Object.entries(counts).filter(([, count]) => Number(count) > 0);
@@ -106,11 +139,11 @@ export default function BooksPage() {
                       <span style={styles.qtyNum}>{inCart}</span>
                       <button style={{...styles.qtyBtn, opacity: maxed ? 0.4 : 1}}
                         disabled={maxed}
-                        onClick={() => addToCart(book)}>+</button>
+                        onClick={() => handleAddBookToCart(book)}>+</button>
                       <span style={styles.inCartTag}>in cart</span>
                     </div>
                   ) : (
-                    <button style={styles.addBtn} onClick={() => addToCart(book)}>
+                    <button style={styles.addBtn} onClick={() => handleAddBookToCart(book)}>
                       + Add to Cart
                     </button>
                   )}
