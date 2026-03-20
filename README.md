@@ -23,6 +23,7 @@ A full-stack library management system built for **Professor Ozdemir** - room 10
 ## Features
 
 ### Authentication
+
 - Registration restricted to **@slu.edu** email addresses only
 - Email verification required before first login
 - **Forgot / reset password** - time-limited token sent by email
@@ -31,17 +32,20 @@ A full-stack library management system built for **Professor Ozdemir** - room 10
 - JWT issued on login (HS256, 24 hr expiry) - stateless, no sessions
 
 ### Book Catalog
+
 - Full CRUD (admin only for add/edit/delete)
 - Search by title, author, or ISBN
 - Filter by availability
 - Copy/quantity tracking per book
 
 ### Checkout System
+
 - Cart-based checkout - add multiple books and check out at once
 - 14-day loan period tracked per checkout
 - Return flow updates availability in real time
 
 ### Admin Panel
+
 - Check out books on behalf of any user
 - View full checkout history with dates
 - Terminal-style scrollable audit log - every action color-coded by type (checkout, return, add book, delete book, register, login)
@@ -51,9 +55,9 @@ A full-stack library management system built for **Professor Ozdemir** - room 10
 
 ## Roles
 
-| Role    | Permissions |
-| ------- | ----------- |
-| `user`  | Browse catalog, search/filter, add to cart, check out, view own checkouts |
+| Role    | Permissions                                                                              |
+| ------- | ---------------------------------------------------------------------------------------- |
+| `user`  | Browse catalog, search/filter, add to cart, check out, view own checkouts                |
 | `admin` | All user permissions + add/edit/delete books, manage all checkouts, audit log, dashboard |
 
 > Admin role is granted at registration if the email is in `ADMIN_EMAILS` (`.env`).
@@ -115,6 +119,7 @@ LibrarySystem/
 ## Local Setup
 
 ### Prerequisites
+
 - Python 3.11+
 - Node.js 20+
 - A MongoDB Atlas cluster
@@ -133,6 +138,7 @@ python run.py                  # runs on http://localhost:5000
 ```
 
 **Seed the database (optional)**
+
 ```bash
 python -m scripts.init_db --seed
 ```
@@ -142,6 +148,7 @@ python -m scripts.init_db --seed
 ```bash
 cd frontend
 npm install
+cp .env.example .env           # optional: set Google Books API key
 npm run dev                    # runs on http://localhost:5173
 ```
 
@@ -172,6 +179,28 @@ RECAPTCHA_SECRET=<your reCAPTCHA v2 secret key>
 
 > `RECAPTCHA_SECRET` can be left empty locally - the backend skips CAPTCHA verification when the value is blank.
 
+Create `frontend/.env` (optional for better barcode metadata reliability):
+
+```env
+VITE_API_URL=http://localhost:5000
+VITE_GOOGLE_BOOKS_API_KEY=<your-google-books-api-key>
+```
+
+If `VITE_GOOGLE_BOOKS_API_KEY` is empty, the app still uses Google Books anonymously, but requests can be rate-limited more easily.
+
+### Get a Google Books API key
+
+1. Open [Google Cloud Console](https://console.cloud.google.com/)
+2. Create/select a project
+3. Go to **APIs & Services -> Library** and enable **Books API**
+4. Go to **APIs & Services -> Credentials -> Create Credentials -> API key**
+5. (Recommended) Restrict the key:
+   - **Application restrictions**: HTTP referrers (web sites)
+   - Add your dev/prod origins (for example `http://localhost:5173/*`)
+   - **API restrictions**: restrict to **Books API**
+6. Paste the key into `frontend/.env` as `VITE_GOOGLE_BOOKS_API_KEY`
+7. Restart the frontend dev server
+
 ---
 
 ## Deployment (Render)
@@ -188,14 +217,14 @@ The repo includes a `render.yaml` Blueprint for one-click deployment of both ser
 
 ## Security
 
-| Measure | Details |
-| ------- | ------- |
-| reCAPTCHA v2 | Required on login - automated scripts cannot obtain a valid token |
-| 500 ms failure delay | Server sleeps on wrong password - slows brute force, no lockouts or false positives |
-| Generic auth errors | Same message for wrong email or wrong password - prevents user enumeration |
-| Email domain restriction | Only `@slu.edu` addresses can register |
-| JWT expiry | Tokens expire after 24 hours |
-| CORS | Backend only accepts requests from the configured frontend origin |
+| Measure                  | Details                                                                             |
+| ------------------------ | ----------------------------------------------------------------------------------- |
+| reCAPTCHA v2             | Required on login - automated scripts cannot obtain a valid token                   |
+| 500 ms failure delay     | Server sleeps on wrong password - slows brute force, no lockouts or false positives |
+| Generic auth errors      | Same message for wrong email or wrong password - prevents user enumeration          |
+| Email domain restriction | Only `@slu.edu` addresses can register                                              |
+| JWT expiry               | Tokens expire after 24 hours                                                        |
+| CORS                     | Backend only accepts requests from the configured frontend origin                   |
 
 ---
 
