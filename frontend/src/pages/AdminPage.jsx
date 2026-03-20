@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import api from "../api/client";
 import { SHELF_OPTIONS } from "../constants/shelfLocations";
 
@@ -12,6 +12,16 @@ export default function AdminPage() {
 
   // Add book form
   const [form, setForm] = useState({ title:"", author:"", isbn:"", total_copies:1, location_code:"A1" });
+  const [isPhone, setIsPhone] = useState(window.innerWidth <= 820);
+  const [showScanner, setShowScanner] = useState(false);
+  const [scannerError, setScannerError] = useState("");
+  const [scannedBarcodes, setScannedBarcodes] = useState([]);
+
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+  const rafRef = useRef(null);
+  const detectorRef = useRef(null);
+  const scanLockRef = useRef(false);
 
   // Edit book modal
   const [editingBook,  setEditingBook]  = useState(null);
@@ -42,6 +52,211 @@ export default function AdminPage() {
   useEffect(() => {
     fetchBooks();
   }, []);
+
+  useEffect(() => {
+    const onResize = () => setIsPhone(window.innerWidth <= 820);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  const normalizeIsbn = (value) => (value || "").replace(/[^0-9Xx]/g, "").toUpperCase();
+
+  const getBookByIsbn = (isbn) => {
+    const normalized = normalizeIsbn(isbn);
+    return books.find((book) => normalizeIsbn(book.isbn) === normalized) || null;
+  };
+
+  const stopScanner = () => {
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+    scanLockRef.current = false;
+  };
+
+  const fetchGoogleBookByIsbn = async (isbn) => {
+    const { data } = await api.get(`https://www.googleapis.com/books/v1/volumes?q=isbn:${encodeURIComponent(isbn)}`);
+    const first = data?.items?.[0]?.volumeInfo;
+    if (!first) return null;
+    return {
+      title: (first.title || "").trim(),
+      author: (first.authors || []).join(", ").trim(),
+    };
+  };
+
+  const addCopyToExistingBook = async (book) => {
+    const targetLocation = form.location_code || book.location_code || "A1";
+    const nextCounts = { ...(book.location_counts || {}) };
+    const normalizedTarget = targetLocation.toUpperCase();
+    nextCounts[normalizedTarget] = Number(nextCounts[normalizedTarget] || 0) + 1;
+
+    await api.put(`/books/${book.id}`, {
+      total_copies: Number(book.total_copies || 0) + 1,
+      location_code: normalizedTarget,
+      location_counts: nextCounts,
+    });
+
+    setMsg(`Added 1 more copy for "${book.title}" at ${normalizedTarget}.`);
+    await fetchBooks();
+  };
+
+  const addBookFromBarcode = async (barcode) => {
+    const details = await fetchGoogleBookByIsbn(barcode);
+    if (!details?.title || !details?.author) {
+      setError("Google Books did not return complete title/author for this barcode.");
+      return;
+    }
+
+    const payload = {
+      title: details.title,
+      author: details.author,
+      isbn: barcode,
+      total_copies: 1,
+      location_code: form.location_code || "A1",
+    };
+
+    await api.post("/books", payload);
+    setForm((prev) => ({ ...prev, title: details.title, author: details.author, isbn: barcode, total_copies: 1 }));
+    setMsg(`Added "${details.title}" by ${details.author} from barcode.`);
+    await fetchBooks();
+  };
+
+  const handleBarcodeDetected = async (rawValue) => {
+    const barcode = normalizeIsbn(rawValue);
+    if (!barcode) return;
+
+    setError("");
+    setMsg("");
+    stopScanner();
+    setShowScanner(false);
+
+    const existing = getBookByIsbn(barcode);
+    const alreadyScanned = scannedBarcodes.includes(barcode);
+
+    if (existing || alreadyScanned) {
+      const proceed = window.confirm("The same barcode has been scanned before. Do you want to add another copy?");
+      if (!proceed) {
+        setMsg("Duplicate barcode skipped.");
+        return;
+      }
+
+      if (existing) {
+        try {
+          await addCopyToExistingBook(existing);
+          if (!scannedBarcodes.includes(barcode)) {
+            setScannedBarcodes((prev) => [...prev, barcode]);
+          }
+        } catch (err) {
+          setError(err.response?.data?.error || "Failed to add another copy.");
+        }
+        return;
+      }
+    }
+
+    try {
+      await addBookFromBarcode(barcode);
+      setScannedBarcodes((prev) => (prev.includes(barcode) ? prev : [...prev, barcode]));
+    } catch (err) {
+      if (err.response?.status === 409 && /isbn/i.test(err.response?.data?.error || "")) {
+        const matched = getBookByIsbn(barcode);
+        if (matched) {
+          const proceed = window.confirm("This barcode already exists. Add another copy instead?");
+          if (proceed) {
+            try {
+              await addCopyToExistingBook(matched);
+              setScannedBarcodes((prev) => (prev.includes(barcode) ? prev : [...prev, barcode]));
+              return;
+            } catch (copyErr) {
+              setError(copyErr.response?.data?.error || "Failed to add another copy.");
+              return;
+            }
+          }
+        }
+        setError("There is duplicate ISBN.");
+      } else {
+        setError(err.response?.data?.error || "Failed to add scanned book.");
+      }
+    }
+  };
+
+  const startScanner = async () => {
+    setScannerError("");
+    if (!("mediaDevices" in navigator) || !("getUserMedia" in navigator.mediaDevices)) {
+      setScannerError("Camera is not available on this device/browser.");
+      return;
+    }
+    if (!("BarcodeDetector" in window)) {
+      setScannerError("Barcode scanning is not supported in this browser. Try Chrome on Android.");
+      return;
+    }
+
+    try {
+      const formats = ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "code_39", "itf"];
+      detectorRef.current = new window.BarcodeDetector({ formats });
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+        audio: false,
+      });
+
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+      }
+
+      const tick = async () => {
+        if (!showScanner || !videoRef.current || !detectorRef.current) return;
+
+        try {
+          if (!scanLockRef.current) {
+            const detected = await detectorRef.current.detect(videoRef.current);
+            if (detected?.length) {
+              const raw = detected[0]?.rawValue || "";
+              const cleaned = normalizeIsbn(raw);
+              if (cleaned.length >= 8) {
+                scanLockRef.current = true;
+                await handleBarcodeDetected(cleaned);
+                return;
+              }
+            }
+          }
+        } catch {
+          // Ignore per-frame detection issues.
+        }
+
+        rafRef.current = requestAnimationFrame(tick);
+      };
+
+      rafRef.current = requestAnimationFrame(tick);
+    } catch (err) {
+      setScannerError(err?.message || "Unable to start camera scanner.");
+      stopScanner();
+    }
+  };
+
+  useEffect(() => {
+    if (showScanner) startScanner();
+    else stopScanner();
+    return () => stopScanner();
+  }, [showScanner]);
+
+  useEffect(() => {
+    if (tab !== "books" && showScanner) {
+      setShowScanner(false);
+    }
+  }, [tab, showScanner]);
 
   const switchTab = (t) => {
     setTab(t); setError(""); setMsg("");
@@ -295,6 +510,31 @@ export default function AdminPage() {
             </select>
             <button style={styles.btn} type="submit">Add Book</button>
           </form>
+
+          {isPhone && (
+            <div style={styles.scannerWrap}>
+              <div style={styles.scannerHeader}>
+                <h4 style={{ margin: 0 }}>Barcode Scanner (Phone)</h4>
+                {!showScanner ? (
+                  <button type="button" style={styles.btn} onClick={() => setShowScanner(true)}>Scan Barcode</button>
+                ) : (
+                  <button type="button" style={{ ...styles.btn, background: "#555" }} onClick={() => setShowScanner(false)}>Stop Scanner</button>
+                )}
+              </div>
+
+              <p style={styles.scannerHint}>
+                Scanning auto-fetches title and author from Google Books, then adds the book.
+              </p>
+
+              {scannerError && <p style={styles.error}>{scannerError}</p>}
+
+              {showScanner && (
+                <div style={styles.scannerPreviewWrap}>
+                  <video ref={videoRef} style={styles.scannerVideo} muted playsInline autoPlay />
+                </div>
+              )}
+            </div>
+          )}
 
           <h3>All Books</h3>
           <input style={{...styles.input, marginBottom:"1rem", maxWidth:"300px"}} placeholder="Search…"
@@ -669,6 +909,11 @@ const styles = {
   chipContainer: { display:"flex", flexWrap:"wrap", gap:"0.4rem", marginBottom:"0.75rem",
                    padding:"0.5rem", background:"#f8f9ff", borderRadius:"6px",
                    border:"1px solid #d0d8f0" },
+  scannerWrap: { marginBottom:"1.25rem", border:"1px solid #dbe3f1", borderRadius:"10px", padding:"0.8rem", background:"#f8fbff" },
+  scannerHeader: { display:"flex", justifyContent:"space-between", alignItems:"center", gap:"0.5rem" },
+  scannerHint: { margin:"0.45rem 0 0.6rem", color:"#45556f", fontSize:"0.86rem" },
+  scannerPreviewWrap: { borderRadius:"8px", overflow:"hidden", border:"1px solid #cbd5e1", background:"#111827" },
+  scannerVideo: { width:"100%", display:"block", maxHeight:"280px", objectFit:"cover" },
   /* console */
   consoleWrap:      { borderRadius:10, overflow:"hidden",
                       boxShadow:"0 8px 32px rgba(0,0,0,0.45)", marginTop:"0.5rem" },
