@@ -13,6 +13,7 @@ export default function LoginPage() {
   const isInvisibleCaptcha = isPhone;
   const [captchaRenderKey, setCaptchaRenderKey] = useState(0);
   const [captchaLoadError, setCaptchaLoadError] = useState("");
+  const [captchaReady, setCaptchaReady] = useState(false);
 
   useEffect(() => {
     const onResize = () => setIsPhone(window.innerWidth <= 420);
@@ -28,6 +29,11 @@ export default function LoginPage() {
 
   const handleSubmit = async () => {
     setError("");
+
+    if (isInvisibleCaptcha && !captchaReady) {
+      setError("Human verification is still loading. Please wait a moment.");
+      return;
+    }
 
     setLoading(true);
 
@@ -67,8 +73,15 @@ export default function LoginPage() {
   const handleRetryCaptcha = () => {
     setCaptchaLoadError("");
     setCaptchaToken("");
+    setCaptchaReady(false);
     setCaptchaRenderKey(prev => prev + 1);
   };
+
+  useEffect(() => {
+    setCaptchaReady(false);
+    setCaptchaLoadError("");
+    setCaptchaToken("");
+  }, [isPhone, captchaRenderKey]);
 
   return (
     <div style={styles.wrapper}>
@@ -97,17 +110,22 @@ export default function LoginPage() {
                 sitekey={SITE_KEY}
                 size={isInvisibleCaptcha ? "invisible" : "normal"}
                 badge={isInvisibleCaptcha ? "bottomright" : undefined}
+                asyncScriptOnLoad={() => {
+                  setCaptchaReady(true);
+                  setCaptchaLoadError("");
+                }}
                 onChange={token => setCaptchaToken(token || "")}
                 onExpired={() => setCaptchaToken("")}
                 onErrored={() => {
+                  setCaptchaReady(false);
                   setCaptchaToken("");
                   setCaptchaLoadError("CAPTCHA failed to load on this network/browser. Tap Retry.");
                 }}
               />
             </div>
-            {isInvisibleCaptcha && !captchaLoadError && (
+            {isInvisibleCaptcha && !captchaReady && !captchaLoadError && (
               <div style={styles.mobileCaptchaHint}>
-                Human verification runs after tapping Sign In.
+                Loading human verification…
               </div>
             )}
             {captchaLoadError && (
