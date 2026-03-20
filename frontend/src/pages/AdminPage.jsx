@@ -63,6 +63,51 @@ export default function AdminPage() {
 
   const normalizeIsbn = (value) => (value || "").replace(/[^0-9Xx]/g, "").toUpperCase();
 
+  const isValidEan13 = (code) => {
+    if (!/^\d{13}$/.test(code)) return false;
+    const digits = code.split("").map(Number);
+    const checksum = digits
+      .slice(0, 12)
+      .reduce((sum, digit, index) => sum + digit * (index % 2 === 0 ? 1 : 3), 0);
+    const checkDigit = (10 - (checksum % 10)) % 10;
+    return checkDigit === digits[12];
+  };
+
+  const isValidIsbn10 = (code) => {
+    if (!/^\d{9}[\dX]$/.test(code)) return false;
+    const digits = code.split("");
+    const checksum = digits
+      .slice(0, 9)
+      .reduce((sum, char, index) => sum + Number(char) * (10 - index), 0);
+    const last = digits[9] === "X" ? 10 : Number(digits[9]);
+    return (checksum + last) % 11 === 0;
+  };
+
+  const isbn10To13 = (isbn10) => {
+    const base = `978${isbn10.slice(0, 9)}`;
+    const checksum = base
+      .split("")
+      .map(Number)
+      .reduce((sum, digit, index) => sum + digit * (index % 2 === 0 ? 1 : 3), 0);
+    const checkDigit = (10 - (checksum % 10)) % 10;
+    return `${base}${checkDigit}`;
+  };
+
+  const toBookIsbn = (rawCode) => {
+    const code = normalizeIsbn(rawCode);
+    if (!code) return "";
+
+    if (code.length === 10 && isValidIsbn10(code)) {
+      return isbn10To13(code);
+    }
+
+    if (code.length === 13 && /^97[89]/.test(code) && isValidEan13(code)) {
+      return code;
+    }
+
+    return "";
+  };
+
   const getBookByIsbn = (isbn) => {
     const normalized = normalizeIsbn(isbn);
     return books.find((book) => normalizeIsbn(book.isbn) === normalized) || null;
@@ -91,8 +136,9 @@ export default function AdminPage() {
     scanLockRef.current = false;
   };
 
-  const fetchGoogleBookByIsbn = async (isbn) => {
-    const response = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${encodeURIComponent(isbn)}`);
+  const fetchGoogleBookByQuery = async (query, useIsbnOperator = true) => {
+    const search = useIsbnOperator ? `isbn:${query}` : query;
+    const response = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(search)}`);
     if (!response.ok) {
       throw new Error(`Google Books lookup failed (${response.status}).`);
     }
@@ -121,10 +167,19 @@ export default function AdminPage() {
     await fetchBooks();
   };
 
-  const addBookFromBarcode = async (barcode) => {
+  const addBookFromBarcode = async (barcode, canonicalIsbn) => {
+    const isbnToStore = canonicalIsbn || barcode;
     let details = null;
     try {
-      details = await fetchGoogleBookByIsbn(barcode);
+      if (canonicalIsbn) {
+        details = await fetchGoogleBookByQuery(canonicalIsbn, true);
+      }
+      if (!details) {
+        details = await fetchGoogleBookByQuery(barcode, true);
+      }
+      if (!details) {
+        details = await fetchGoogleBookByQuery(barcode, false);
+      }
     } catch {
       details = null;
     }
@@ -146,13 +201,13 @@ export default function AdminPage() {
     const payload = {
       title: details.title,
       author: details.author,
-      isbn: barcode,
+      isbn: isbnToStore,
       total_copies: 1,
       location_code: form.location_code || "A1",
     };
 
     await api.post("/books", payload);
-    setForm((prev) => ({ ...prev, title: details.title, author: details.author, isbn: barcode, total_copies: 1 }));
+    setForm((prev) => ({ ...prev, title: details.title, author: details.author, isbn: isbnToStore, total_copies: 1 }));
     setMsg(`Added "${details.title}" by ${details.author} from barcode.`);
     await fetchBooks();
   };
@@ -160,14 +215,16 @@ export default function AdminPage() {
   const handleBarcodeDetected = async (rawValue) => {
     const barcode = normalizeIsbn(rawValue);
     if (!barcode) return;
+    const canonicalIsbn = toBookIsbn(barcode);
+    const isbnForMatching = canonicalIsbn || barcode;
 
     setError("");
     setMsg("");
     stopScanner();
     setShowScanner(false);
 
-    const existing = getBookByIsbn(barcode);
-    const alreadyScanned = scannedBarcodes.includes(barcode);
+    const existing = getBookByIsbn(isbnForMatching);
+    const alreadyScanned = scannedBarcodes.includes(isbnForMatching);
 
     if (existing || alreadyScanned) {
       const proceed = window.confirm("The same barcode has been scanned before. Do you want to add another copy?");
@@ -179,8 +236,8 @@ export default function AdminPage() {
       if (existing) {
         try {
           await addCopyToExistingBook(existing);
-          if (!scannedBarcodes.includes(barcode)) {
-            setScannedBarcodes((prev) => [...prev, barcode]);
+          if (!scannedBarcodes.includes(isbnForMatching)) {
+            setScannedBarcodes((prev) => [...prev, isbnForMatching]);
           }
         } catch (err) {
           setError(err.response?.data?.error || "Failed to add another copy.");
@@ -190,17 +247,17 @@ export default function AdminPage() {
     }
 
     try {
-      await addBookFromBarcode(barcode);
-      setScannedBarcodes((prev) => (prev.includes(barcode) ? prev : [...prev, barcode]));
+      await addBookFromBarcode(barcode, canonicalIsbn);
+      setScannedBarcodes((prev) => (prev.includes(isbnForMatching) ? prev : [...prev, isbnForMatching]));
     } catch (err) {
       if (err.response?.status === 409 && /isbn/i.test(err.response?.data?.error || "")) {
-        const matched = getBookByIsbn(barcode);
+        const matched = getBookByIsbn(isbnForMatching);
         if (matched) {
           const proceed = window.confirm("This barcode already exists. Add another copy instead?");
           if (proceed) {
             try {
               await addCopyToExistingBook(matched);
-              setScannedBarcodes((prev) => (prev.includes(barcode) ? prev : [...prev, barcode]));
+              setScannedBarcodes((prev) => (prev.includes(isbnForMatching) ? prev : [...prev, isbnForMatching]));
               return;
             } catch (copyErr) {
               setError(copyErr.response?.data?.error || "Failed to add another copy.");
