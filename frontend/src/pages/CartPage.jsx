@@ -9,6 +9,12 @@ export default function CartPage() {
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState("");
   const [success, setSuccess] = useState("");
+  const [locationPicker, setLocationPicker] = useState({
+    open: false,
+    item: null,
+    options: [],
+    selected: "",
+  });
 
   const locationSummary = (item) => {
     const counts = item.location_counts || {};
@@ -20,37 +26,38 @@ export default function CartPage() {
       .join(", ");
   };
 
-  const promptCheckoutLocation = (item) => {
+  const getLocationOptions = (item) => {
     const counts = item.location_counts || {};
-    const entries = Object.entries(counts)
+    return Object.entries(counts)
       .filter(([, count]) => Number(count) > 0)
       .sort(([left], [right]) => left.localeCompare(right));
-
-    if (entries.length <= 1) {
-      return entries[0]?.[0] || item.location_code || "A1";
-    }
-
-    const choices = entries.map(([code, count]) => `${code}:${count}`).join(", ");
-    const picked = window.prompt(
-      `"${item.title}" has multiple shelf locations.\nChoose where this cart copy will be checked out from.\nAvailable: ${choices}\n\nEnter location code (e.g., A1):`,
-      entries[0][0]
-    );
-
-    if (picked === null) return "";
-    const normalized = String(picked).trim().toUpperCase();
-    if (!entries.some(([code]) => code === normalized)) {
-      setError(`Invalid location for "${item.title}". Choose one of: ${choices}`);
-      return "";
-    }
-
-    return normalized;
   };
 
   const handleAddCopy = (item) => {
     setError("");
-    const locationCode = promptCheckoutLocation(item);
-    if (!locationCode) return;
-    addToCart(item, locationCode);
+    const entries = getLocationOptions(item);
+    if (entries.length <= 1) {
+      const fallback = entries[0]?.[0] || item.location_code || "A1";
+      addToCart(item, fallback);
+      return;
+    }
+
+    setLocationPicker({
+      open: true,
+      item,
+      options: entries,
+      selected: entries[0][0],
+    });
+  };
+
+  const handleConfirmLocationPick = () => {
+    if (!locationPicker.item || !locationPicker.selected) return;
+    addToCart(locationPicker.item, locationPicker.selected);
+    setLocationPicker({ open: false, item: null, options: [], selected: "" });
+  };
+
+  const handleCancelLocationPick = () => {
+    setLocationPicker({ open: false, item: null, options: [], selected: "" });
   };
 
   const handleCheckout = async () => {
@@ -181,6 +188,30 @@ export default function CartPage() {
               </button>
             </div>
           </div>
+
+          {locationPicker.open && (
+            <div style={s.pickerOverlay} onClick={handleCancelLocationPick}>
+              <div style={s.pickerCard} onClick={(event) => event.stopPropagation()}>
+                <h4 style={{ margin: "0 0 0.5rem" }}>Select Pickup Location</h4>
+                <p style={{ margin: "0 0 0.7rem", color: "#555", fontSize: "0.9rem" }}>
+                  {locationPicker.item?.title}
+                </p>
+                <select
+                  style={s.selectLike}
+                  value={locationPicker.selected}
+                  onChange={(event) => setLocationPicker((prev) => ({ ...prev, selected: event.target.value }))}
+                >
+                  {locationPicker.options.map(([code, count]) => (
+                    <option key={code} value={code}>{code} ({count} available)</option>
+                  ))}
+                </select>
+                <div style={s.pickerActions}>
+                  <button style={s.clearBtn} onClick={handleCancelLocationPick}>Cancel</button>
+                  <button style={s.checkoutBtn} onClick={handleConfirmLocationPick}>Add Copy</button>
+                </div>
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>
@@ -211,4 +242,8 @@ const s = {
                  borderRadius: 4, marginBottom: "1rem" },
   error:       { background: "#ffeaea", color: "#c00", padding: "0.75rem 1rem",
                  borderRadius: 4, marginBottom: "1rem" },
+  pickerOverlay:{ position:"fixed", inset:0, background:"rgba(0,0,0,0.45)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:1200 },
+  pickerCard:   { width:"92vw", maxWidth:360, background:"#fff", borderRadius:10, padding:"1rem", boxShadow:"0 20px 50px rgba(0,0,0,0.25)" },
+  pickerActions:{ marginTop:"0.8rem", display:"flex", justifyContent:"flex-end", gap:"0.5rem" },
+  selectLike:   { width:"100%", padding:"0.5rem 0.75rem", border:"1px solid #ccc", borderRadius:4, fontSize:"0.95rem" },
 };

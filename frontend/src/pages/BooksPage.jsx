@@ -10,6 +10,12 @@ export default function BooksPage() {
   const [search,    setSearch]    = useState("");
   const [available, setAvailable] = useState("");
   const [error,     setError]     = useState("");
+  const [locationPicker, setLocationPicker] = useState({
+    open: false,
+    book: null,
+    options: [],
+    selected: "",
+  });
 
   const fetchBooks = async () => {
     const params = {};
@@ -29,37 +35,38 @@ export default function BooksPage() {
 
   const cartQty = (bookId) => cart.find(i => i.id === bookId)?.quantity || 0;
 
-  const promptCheckoutLocation = (book) => {
+  const getLocationOptions = (book) => {
     const counts = book.location_counts || {};
-    const entries = Object.entries(counts)
+    return Object.entries(counts)
       .filter(([, count]) => Number(count) > 0)
       .sort(([left], [right]) => left.localeCompare(right));
-
-    if (entries.length <= 1) {
-      return entries[0]?.[0] || book.location_code || "A1";
-    }
-
-    const choices = entries.map(([code, count]) => `${code}:${count}`).join(", ");
-    const picked = window.prompt(
-      `"${book.title}" has multiple shelf locations.\nChoose where this cart copy will be checked out from.\nAvailable: ${choices}\n\nEnter location code (e.g., A1):`,
-      entries[0][0]
-    );
-
-    if (picked === null) return "";
-    const normalized = String(picked).trim().toUpperCase();
-    if (!entries.some(([code]) => code === normalized)) {
-      setError(`Invalid location for "${book.title}". Choose one of: ${choices}`);
-      return "";
-    }
-
-    return normalized;
   };
 
   const handleAddBookToCart = (book) => {
     setError("");
-    const locationCode = promptCheckoutLocation(book);
-    if (!locationCode) return;
-    addToCart(book, locationCode);
+    const entries = getLocationOptions(book);
+    if (entries.length <= 1) {
+      const fallback = entries[0]?.[0] || book.location_code || "A1";
+      addToCart(book, fallback);
+      return;
+    }
+
+    setLocationPicker({
+      open: true,
+      book,
+      options: entries,
+      selected: entries[0][0],
+    });
+  };
+
+  const handleConfirmLocationPick = () => {
+    if (!locationPicker.book || !locationPicker.selected) return;
+    addToCart(locationPicker.book, locationPicker.selected);
+    setLocationPicker({ open: false, book: null, options: [], selected: "" });
+  };
+
+  const handleCancelLocationPick = () => {
+    setLocationPicker({ open: false, book: null, options: [], selected: "" });
   };
 
   const locationSummary = (book) => {
@@ -153,6 +160,30 @@ export default function BooksPage() {
           })}
         </tbody>
       </table>
+
+      {locationPicker.open && (
+        <div style={styles.pickerOverlay} onClick={handleCancelLocationPick}>
+          <div style={styles.pickerCard} onClick={(event) => event.stopPropagation()}>
+            <h4 style={{ margin: "0 0 0.5rem" }}>Select Pickup Location</h4>
+            <p style={{ margin: "0 0 0.7rem", color: "#555", fontSize: "0.9rem" }}>
+              {locationPicker.book?.title}
+            </p>
+            <select
+              style={styles.select}
+              value={locationPicker.selected}
+              onChange={(event) => setLocationPicker((prev) => ({ ...prev, selected: event.target.value }))}
+            >
+              {locationPicker.options.map(([code, count]) => (
+                <option key={code} value={code}>{code} ({count} available)</option>
+              ))}
+            </select>
+            <div style={styles.pickerActions}>
+              <button style={styles.btnOutline} onClick={handleCancelLocationPick}>Cancel</button>
+              <button style={styles.btn} onClick={handleConfirmLocationPick}>Add to Cart</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -190,6 +221,9 @@ const styles = {
              borderRadius:"12px", fontSize:"0.85rem" },
   locationTag: { background:"#e8f0fe", color:"#003087", padding:"2px 8px",
                  borderRadius:"12px", fontSize:"0.85rem", fontWeight:"600" },
+  pickerOverlay: { position:"fixed", inset:0, background:"rgba(0,0,0,0.45)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:1200 },
+  pickerCard: { width:"92vw", maxWidth:360, background:"#fff", borderRadius:10, padding:"1rem", boxShadow:"0 20px 50px rgba(0,0,0,0.25)" },
+  pickerActions: { marginTop:"0.8rem", display:"flex", justifyContent:"flex-end", gap:"0.5rem" },
   error:   { background:"#ffeaea", color:"#c00", padding:"0.6rem",
              borderRadius:"4px", marginBottom:"0.5rem" },
 };
