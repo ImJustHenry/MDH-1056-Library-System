@@ -37,14 +37,22 @@ export default function BooksPage() {
 
   const getLocationOptions = (book) => {
     const counts = book.location_counts || {};
+    const cartItem = cart.find((item) => item.id === book.id);
+    const selectedCounts = cartItem?.selected_location_counts || {};
+
     return Object.entries(counts)
-      .filter(([, count]) => Number(count) > 0)
+      .map(([code, count]) => [code, Number(count) - Number(selectedCounts[code] || 0)])
+      .filter(([, remaining]) => remaining > 0)
       .sort(([left], [right]) => left.localeCompare(right));
   };
 
   const handleAddBookToCart = (book) => {
     setError("");
     const entries = getLocationOptions(book);
+    if (entries.length === 0) {
+      setError(`No remaining copies by shelf location for "${book.title}".`);
+      return;
+    }
     if (entries.length <= 1) {
       const fallback = entries[0]?.[0] || book.location_code || "A1";
       addToCart(book, fallback);

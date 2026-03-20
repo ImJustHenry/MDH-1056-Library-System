@@ -28,14 +28,20 @@ export default function CartPage() {
 
   const getLocationOptions = (item) => {
     const counts = item.location_counts || {};
+    const selectedCounts = item.selected_location_counts || {};
     return Object.entries(counts)
-      .filter(([, count]) => Number(count) > 0)
+      .map(([code, count]) => [code, Number(count) - Number(selectedCounts[code] || 0)])
+      .filter(([, remaining]) => remaining > 0)
       .sort(([left], [right]) => left.localeCompare(right));
   };
 
   const handleAddCopy = (item) => {
     setError("");
     const entries = getLocationOptions(item);
+    if (entries.length === 0) {
+      setError(`No remaining copies by shelf location for "${item.title}".`);
+      return;
+    }
     if (entries.length <= 1) {
       const fallback = entries[0]?.[0] || item.location_code || "A1";
       addToCart(item, fallback);

@@ -18,9 +18,14 @@ export function CartProvider({ children }) {
     setCart(prev => {
       const existing = prev.find(i => i.id === book.id);
       const locationCode = String(selectedLocation || pickFallbackLocation(book)).trim().toUpperCase();
+      const rawMaxAtLocation = Number((book.location_counts || {})[locationCode]);
+      const maxAtLocation = Number.isFinite(rawMaxAtLocation) && rawMaxAtLocation > 0
+        ? rawMaxAtLocation
+        : Number.MAX_SAFE_INTEGER;
 
       if (existing) {
         if (existing.quantity >= existing.available_copies) return prev; // cap at available
+        if (Number(existing.selected_location_counts?.[locationCode] || 0) >= maxAtLocation) return prev;
 
         return prev.map(i => {
           if (i.id !== book.id) return i;
