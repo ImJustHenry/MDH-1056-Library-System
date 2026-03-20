@@ -93,15 +93,50 @@ export default function AdminPage() {
     return `${base}${checkDigit}`;
   };
 
+  const isbn13To10 = (isbn13) => {
+    if (!/^978\d{10}$/.test(isbn13) || !isValidEan13(isbn13)) return "";
+    const body = isbn13.slice(3, 12);
+    const sum = body
+      .split("")
+      .map(Number)
+      .reduce((acc, digit, index) => acc + digit * (10 - index), 0);
+    const checkValue = (11 - (sum % 11)) % 11;
+    const checkDigit = checkValue === 10 ? "X" : String(checkValue);
+    return `${body}${checkDigit}`;
+  };
+
+  const getIsbnVariants = (rawCode) => {
+    const code = normalizeIsbn(rawCode);
+    if (!code) return [];
+
+    const variants = new Set([code]);
+
+    if (code.length === 10 && isValidIsbn10(code)) {
+      variants.add(isbn10To13(code));
+    }
+
+    if (code.length === 13 && /^97[89]/.test(code) && isValidEan13(code)) {
+      if (code.startsWith("978")) {
+        const isbn10 = isbn13To10(code);
+        if (isbn10) variants.add(isbn10);
+      }
+    }
+
+    return Array.from(variants);
+  };
+
   const toBookIsbn = (rawCode) => {
     const code = normalizeIsbn(rawCode);
     if (!code) return "";
 
     if (code.length === 10 && isValidIsbn10(code)) {
-      return isbn10To13(code);
+      return code;
     }
 
     if (code.length === 13 && /^97[89]/.test(code) && isValidEan13(code)) {
+      if (code.startsWith("978")) {
+        return isbn13To10(code) || code;
+      }
       return code;
     }
 
@@ -109,20 +144,20 @@ export default function AdminPage() {
   };
 
   const getBookByIsbn = (isbn) => {
-    const normalized = normalizeIsbn(isbn);
-    return books.find((book) => normalizeIsbn(book.isbn) === normalized) || null;
+    const variants = getIsbnVariants(isbn);
+    return books.find((book) => variants.includes(normalizeIsbn(book.isbn))) || null;
   };
 
   const findExistingBookByIsbn = async (isbn) => {
-    const normalized = normalizeIsbn(isbn);
-    if (!normalized) return null;
+    const variants = getIsbnVariants(isbn);
+    if (!variants.length) return null;
 
-    const localMatch = books.find((book) => normalizeIsbn(book.isbn) === normalized);
+    const localMatch = books.find((book) => variants.includes(normalizeIsbn(book.isbn)));
     if (localMatch) return localMatch;
 
     try {
       const { data } = await api.get("/books");
-      return data.find((book) => normalizeIsbn(book.isbn) === normalized) || null;
+      return data.find((book) => variants.includes(normalizeIsbn(book.isbn))) || null;
     } catch {
       return null;
     }
