@@ -20,12 +20,27 @@ api.interceptors.request.use((config) => {
 // If the server returns 401, clear stored token and redirect to login
 api.interceptors.response.use(
   (res) => res,
-  (err) => {
-    if (err.response?.status === 401) {
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      window.location.href = "/login";
+  async (err) => {
+    const status = err.response?.status;
+    const config = err.config || {};
+    const requestUrl = String(config.url || "");
+    const serverError = String(err.response?.data?.error || "");
+    const token = localStorage.getItem("token");
+
+    if (status === 401 && token && !config._authRetry && !requestUrl.includes("/auth/login")) {
+      config._authRetry = true;
+      return api(config);
     }
+
+    if (status === 401) {
+      const shouldForceLogout = /token|authorization header|expired|invalid/i.test(serverError);
+      if (shouldForceLogout) {
+        localStorage.removeItem("token");
+        localStorage.removeItem("user");
+        window.location.href = "/login";
+      }
+    }
+
     return Promise.reject(err);
   }
 );
