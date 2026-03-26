@@ -11,7 +11,12 @@ export default function DashboardPage() {
   useEffect(() => {
     const onResize = () => setIsPhone(window.innerWidth <= 680);
     window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
+    window.addEventListener("orientationchange", onResize);
+    onResize();
+    return () => {
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("orientationchange", onResize);
+    };
   }, []);
 
   useEffect(() => {
@@ -60,53 +65,78 @@ export default function DashboardPage() {
         <p style={styles.shelfHint}>A-D shelves (left to right), levels 1-6.</p>
 
         {shelfMap && (
-          <div style={styles.mapScroll}>
-            <div style={styles.mapWrap(isPhone)}>
-              <div style={styles.matrixHeaderRow}>
-                <div style={styles.matrixCorner} />
-                {shelves.map((shelf) => (
-                  <div key={shelf} style={styles.matrixHeaderCell}>{shelf}</div>
-                ))}
-              </div>
+          isPhone ? (
+            <div style={styles.mobileShelfGrid}>
+              {shelves.map((shelf) => (
+                <div key={shelf} style={styles.mobileShelfCard}>
+                  <div style={styles.mobileShelfTitle}>Shelf {shelf}</div>
+                  <div style={styles.mobileShelfLevels}>
+                    {levels.map((level) => {
+                      const slot = slotByCode[`${shelf}${level}`] || {
+                        available_total: 0,
+                        title_entries: [],
+                      };
 
-              {levels.map((level) => (
-                <div key={level} style={styles.matrixRow}>
-                  <div style={styles.matrixRowLabel}>{level}</div>
-                  {shelves.map((shelf) => {
-                    const slot = slotByCode[`${shelf}${level}`] || {
-                      available_total: 0,
-                      title_entries: [],
-                    };
-
-                    return (
-                      <div key={`${shelf}${level}`} style={styles.slot}>
-                        <div style={styles.slotBody}>
-                          <div style={styles.slotCount}>
-                            {slot.available_total} cop{slot.available_total === 1 ? "y" : "ies"}
-                          </div>
-                          {slot.title_entries.length > 0 ? (
-                            <ul style={styles.slotTitles}>
-                              {slot.title_entries.slice(0, 2).map((entry) => (
-                                <li key={`${shelf}${level}-${entry.title}`} style={styles.slotTitleRow}>
-                                  <span style={styles.slotTitleText}>{entry.title}</span>
-                                  <span style={styles.titleCopies}>x{entry.copies}</span>
-                                </li>
-                              ))}
-                              {slot.title_entries.length > 2 && (
-                                <li style={styles.slotMore}>+{slot.title_entries.length - 2} more</li>
-                              )}
-                            </ul>
-                          ) : (
-                            <div style={styles.slotEmpty}>Empty</div>
-                          )}
+                      return (
+                        <div key={`${shelf}${level}`} style={styles.mobileSlotRow}>
+                          <div style={styles.mobileSlotLabel}>{shelf}{level}</div>
+                          <div style={styles.mobileSlotCount}>{slot.available_total}</div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
               ))}
             </div>
-          </div>
+          ) : (
+            <div style={styles.mapScroll}>
+              <div style={styles.mapWrap(isPhone)}>
+                <div style={styles.matrixHeaderRow}>
+                  <div style={styles.matrixCorner} />
+                  {shelves.map((shelf) => (
+                    <div key={shelf} style={styles.matrixHeaderCell}>{shelf}</div>
+                  ))}
+                </div>
+
+                {levels.map((level) => (
+                  <div key={level} style={styles.matrixRow}>
+                    <div style={styles.matrixRowLabel}>{level}</div>
+                    {shelves.map((shelf) => {
+                      const slot = slotByCode[`${shelf}${level}`] || {
+                        available_total: 0,
+                        title_entries: [],
+                      };
+
+                      return (
+                        <div key={`${shelf}${level}`} style={styles.slot}>
+                          <div style={styles.slotBody}>
+                            <div style={styles.slotCount}>
+                              {slot.available_total} cop{slot.available_total === 1 ? "y" : "ies"}
+                            </div>
+                            {slot.title_entries.length > 0 ? (
+                              <ul style={styles.slotTitles}>
+                                {slot.title_entries.slice(0, 2).map((entry) => (
+                                  <li key={`${shelf}${level}-${entry.title}`} style={styles.slotTitleRow}>
+                                    <span style={styles.slotTitleText}>{entry.title}</span>
+                                    <span style={styles.titleCopies}>x{entry.copies}</span>
+                                  </li>
+                                ))}
+                                {slot.title_entries.length > 2 && (
+                                  <li style={styles.slotMore}>+{slot.title_entries.length - 2} more</li>
+                                )}
+                              </ul>
+                            ) : (
+                              <div style={styles.slotEmpty}>Empty</div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )
         )}
       </div>
     </div>
@@ -138,4 +168,11 @@ const styles = {
   titleCopies: { color:"#1d4ed8", fontWeight:"700", flexShrink:0 },
   slotMore: { color:"#64748b", marginTop:"0.1rem" },
   slotEmpty: { color:"#94a3b8", fontSize:"0.7rem", fontStyle:"italic" },
+  mobileShelfGrid: { marginTop:"0.8rem", display:"grid", gap:"0.7rem", gridTemplateColumns:"repeat(2, minmax(0, 1fr))" },
+  mobileShelfCard: { border:"1px solid #e2e8f0", borderRadius:8, background:"#fff", padding:"0.55rem" },
+  mobileShelfTitle: { fontSize:"0.8rem", fontWeight:"700", color:"#0f172a", marginBottom:"0.35rem" },
+  mobileShelfLevels: { display:"grid", gap:"0.25rem" },
+  mobileSlotRow: { display:"flex", alignItems:"center", justifyContent:"space-between", gap:"0.4rem", borderTop:"1px solid #f1f5f9", paddingTop:"0.22rem" },
+  mobileSlotLabel: { fontSize:"0.78rem", color:"#334155", fontWeight:"600" },
+  mobileSlotCount: { fontSize:"0.78rem", color:"#1d4ed8", fontWeight:"700" },
 };
