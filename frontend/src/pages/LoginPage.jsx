@@ -33,7 +33,8 @@ export default function LoginPage() {
   const handleSubmit = async () => {
     setError("");
 
-    if (useInvisibleCaptcha && !captchaReady) {
+    // Check readiness for both invisible and visible modes
+    if (!captchaReady) {
       setError("Human verification is still loading. Please wait a moment.");
       return;
     }
@@ -43,14 +44,18 @@ export default function LoginPage() {
     let tokenToUse = captchaToken;
     if (!tokenToUse && useInvisibleCaptcha) {
       try {
+        console.log("[LoginPage] Executing invisible CAPTCHA...");
         tokenToUse = await captchaRef.current?.executeAsync();
+        console.log("[LoginPage] Invisible CAPTCHA token obtained:", !!tokenToUse);
         setCaptchaToken(tokenToUse || "");
-      } catch {
+      } catch (err) {
+        console.error("[LoginPage] Invisible CAPTCHA executeAsync failed:", err);
         tokenToUse = "";
       }
 
       if (!tokenToUse) {
         setLoading(false);
+        console.log("[LoginPage] Switching to visible CAPTCHA mode...");
         setForceVisibleCaptcha(true);
         setCaptchaReady(false);
         setCaptchaToken("");
@@ -62,14 +67,18 @@ export default function LoginPage() {
 
     if (!tokenToUse) {
       setLoading(false);
-      setError("Please complete the CAPTCHA.");
+      console.error("[LoginPage] No CAPTCHA token available. Token state:", captchaToken);
+      setError("Please complete the CAPTCHA and try again.");
       return;
     }
 
     try {
+      console.log("[LoginPage] Submitting login with email:", email);
       const loggedInUser = await login(email, password, tokenToUse);
+      console.log("[LoginPage] Login successful, user role:", loggedInUser.role);
       navigate(loggedInUser.role === "admin" ? "/dashboard" : "/books", { replace: true });
     } catch (err) {
+      console.error("[LoginPage] Login failed:", err.response?.data || err.message);
       // reset captcha so user must solve it again
       captchaRef.current?.reset();
       setCaptchaToken("");
@@ -152,15 +161,24 @@ export default function LoginPage() {
                 size={useInvisibleCaptcha ? "invisible" : "normal"}
                 badge={useInvisibleCaptcha ? "bottomright" : undefined}
                 asyncScriptOnLoad={() => {
+                  console.log("[ReCAPTCHA] Script loaded, mode:", useInvisibleCaptcha ? "invisible" : "visible");
                   setCaptchaReady(true);
                   setCaptchaLoadError("");
                 }}
-                onChange={token => setCaptchaToken(token || "")}
-                onExpired={() => setCaptchaToken("")}
+                onChange={token => {
+                  console.log("[ReCAPTCHA] User completed CAPTCHA, token obtained:", !!token);
+                  setCaptchaToken(token || "");
+                }}
+                onExpired={() => {
+                  console.log("[ReCAPTCHA] Token expired");
+                  setCaptchaToken("");
+                }}
                 onErrored={() => {
+                  console.error("[ReCAPTCHA] Error occurred");
                   setCaptchaReady(false);
                   setCaptchaToken("");
                   if (isPhone && !forceVisibleCaptcha) {
+                    console.log("[ReCAPTCHA] Auto-switching to visible mode due to error...");
                     setForceVisibleCaptcha(true);
                     setCaptchaRenderKey(prev => prev + 1);
                     return;
