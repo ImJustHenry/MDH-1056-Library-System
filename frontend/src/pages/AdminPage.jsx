@@ -198,7 +198,14 @@ export default function AdminPage() {
 
     const response = await fetch(url.toString());
     if (!response.ok) {
-      throw new Error(`Google Books lookup failed (${response.status}).`);
+      let reason = "";
+      try {
+        const errorData = await response.json();
+        reason = errorData?.error?.message || "";
+      } catch {
+        reason = "";
+      }
+      throw new Error(`Google Books lookup failed (${response.status})${reason ? `: ${reason}` : ""}.`);
     }
     const data = await response.json();
     const first = data?.items?.[0]?.volumeInfo;
@@ -279,8 +286,9 @@ export default function AdminPage() {
       if (!details) {
         details = await fetchGoogleBookByQuery(barcode, false);
       }
-    } catch {
+    } catch (lookupErr) {
       details = null;
+      setMsg(lookupErr?.message || "Google Books lookup failed. Falling back to manual entry.");
     }
 
     if (!details?.title || !details?.author) {

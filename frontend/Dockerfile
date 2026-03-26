@@ -11,6 +11,8 @@ COPY . .
 # VITE_API_URL is injected by Render as a build arg (set it in render.yaml or dashboard)
 ARG VITE_API_URL
 ENV VITE_API_URL=$VITE_API_URL
+ARG VITE_GOOGLE_BOOKS_API_KEY
+ENV VITE_GOOGLE_BOOKS_API_KEY=$VITE_GOOGLE_BOOKS_API_KEY
 
 RUN npm run build
 
