@@ -2,10 +2,11 @@ import { useEffect, useState } from "react";
 import api from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { SHELF_COLUMNS, SHELF_LEVELS } from "../constants/shelfLocations";
+import useViewportMatch from "../hooks/useViewportMatch";
 
 export default function CheckoutsPage() {
   const { user } = useAuth();
-  const [isPhone, setIsPhone] = useState(window.innerWidth <= 820);
+  const isPhone = useViewportMatch(820);
   const [checkouts, setCheckouts] = useState([]);
   const [filter,    setFilter]    = useState("");
   const [error,     setError]     = useState("");
@@ -25,12 +26,6 @@ export default function CheckoutsPage() {
   };
 
   useEffect(() => { fetchCheckouts(); }, []);
-
-  useEffect(() => {
-    const onResize = () => setIsPhone(window.innerWidth <= 820);
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
 
   const openReturnPopup = (checkout) => {
     setReturnTarget(checkout);

@@ -2,11 +2,12 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../api/client";
 import { useCart } from "../context/CartContext";
+import useViewportMatch from "../hooks/useViewportMatch";
 
 export default function BooksPage() {
   const { cart, addToCart, updateQuantity, totalItems } = useCart();
   const navigate                              = useNavigate();
-  const [isPhone, setIsPhone] = useState(window.innerWidth <= 820);
+  const isPhone = useViewportMatch(820);
   const [books,     setBooks]     = useState([]);
   const [search,    setSearch]    = useState("");
   const [available, setAvailable] = useState("");
@@ -31,12 +32,6 @@ export default function BooksPage() {
   };
 
   useEffect(() => { fetchBooks(); }, []);
-
-  useEffect(() => {
-    const onResize = () => setIsPhone(window.innerWidth <= 820);
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
 
   const handleSearch = (e) => { e.preventDefault(); fetchBooks(); };
 

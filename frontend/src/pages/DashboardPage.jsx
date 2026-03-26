@@ -1,23 +1,13 @@
 import { useEffect, useState } from "react";
 import api from "../api/client";
+import useViewportMatch from "../hooks/useViewportMatch";
 
 export default function DashboardPage() {
   const [stats, setStats] = useState(null);
   const [shelfMap, setShelfMap] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
-  const [isPhone, setIsPhone] = useState(window.innerWidth <= 680);
-
-  useEffect(() => {
-    const onResize = () => setIsPhone(window.innerWidth <= 680);
-    window.addEventListener("resize", onResize);
-    window.addEventListener("orientationchange", onResize);
-    onResize();
-    return () => {
-      window.removeEventListener("resize", onResize);
-      window.removeEventListener("orientationchange", onResize);
-    };
-  }, []);
+  const isPhone = useViewportMatch(680);
 
   useEffect(() => {
     Promise.all([api.get("/dashboard"), api.get("/dashboard/shelf-map")])

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import api from "../api/client";
 import { SHELF_OPTIONS } from "../constants/shelfLocations";
+import useViewportMatch from "../hooks/useViewportMatch";
 
 export default function AdminPage() {
   const googleBooksApiKey = import.meta.env.VITE_GOOGLE_BOOKS_API_KEY || "";
@@ -14,7 +15,7 @@ export default function AdminPage() {
 
   // Add book form
   const [form, setForm] = useState({ title:"", author:"", isbn:"", total_copies:1, location_code:"A1" });
-  const [isPhone, setIsPhone] = useState(window.innerWidth <= 820);
+  const isPhone = useViewportMatch(820);
   const [showScanner, setShowScanner] = useState(false);
   const [scannerError, setScannerError] = useState("");
   const [scannedBarcodes, setScannedBarcodes] = useState([]);
@@ -62,12 +63,6 @@ export default function AdminPage() {
 
   useEffect(() => {
     fetchBooks();
-  }, []);
-
-  useEffect(() => {
-    const onResize = () => setIsPhone(window.innerWidth <= 820);
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
   }, []);
 
   const normalizeIsbn = (value) => (value || "").replace(/[^0-9Xx]/g, "").toUpperCase();

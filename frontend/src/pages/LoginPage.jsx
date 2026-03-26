@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import ReCAPTCHA from "react-google-recaptcha";
 import { useAuth } from "../context/AuthContext";
+import useViewportMatch from "../hooks/useViewportMatch";
 
 const SITE_KEY = "6LeNIH4sAAAAAGDOforW2BRSfdmP5bxN_o88uai6";
 const PHONE_CAPTCHA_BREAKPOINT = 500;
@@ -10,7 +11,7 @@ export default function LoginPage() {
   const { login } = useAuth();
   const navigate   = useNavigate();
   const captchaRef = useRef(null);
-  const [isPhone, setIsPhone] = useState(window.innerWidth <= PHONE_CAPTCHA_BREAKPOINT);
+  const isPhone = useViewportMatch(PHONE_CAPTCHA_BREAKPOINT);
   const isInvisibleCaptcha = isPhone;
   const [forceVisibleCaptcha, setForceVisibleCaptcha] = useState(false);
   const useInvisibleCaptcha = isInvisibleCaptcha && !forceVisibleCaptcha;
@@ -19,12 +20,6 @@ export default function LoginPage() {
   const [captchaLoadError, setCaptchaLoadError] = useState("");
   const [captchaReady, setCaptchaReady] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
-
-  useEffect(() => {
-    const onResize = () => setIsPhone(window.innerWidth <= PHONE_CAPTCHA_BREAKPOINT);
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
 
   const [email,        setEmail]        = useState("");
   const [password,     setPassword]     = useState("");

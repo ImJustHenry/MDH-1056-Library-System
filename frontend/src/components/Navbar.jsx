@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
+import useViewportMatch from "../hooks/useViewportMatch";
 
 export default function Navbar() {
   const { user, logout } = useAuth();
@@ -10,13 +11,7 @@ export default function Navbar() {
   const location         = useLocation();
 
   const [menuOpen, setMenuOpen] = useState(false);
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= 680);
-
-  useEffect(() => {
-    const handle = () => setIsMobile(window.innerWidth <= 680);
-    window.addEventListener("resize", handle);
-    return () => window.removeEventListener("resize", handle);
-  }, []);
+  const isMobile = useViewportMatch(680);
 
   // Close menu whenever the page changes
   useEffect(() => setMenuOpen(false), [location.pathname]);
