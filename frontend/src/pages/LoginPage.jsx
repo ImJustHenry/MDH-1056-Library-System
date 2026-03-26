@@ -4,12 +4,13 @@ import ReCAPTCHA from "react-google-recaptcha";
 import { useAuth } from "../context/AuthContext";
 
 const SITE_KEY = "6LeNIH4sAAAAAGDOforW2BRSfdmP5bxN_o88uai6";
+const PHONE_CAPTCHA_BREAKPOINT = 500;
 
 export default function LoginPage() {
   const { login } = useAuth();
   const navigate   = useNavigate();
   const captchaRef = useRef(null);
-  const [isPhone, setIsPhone] = useState(window.innerWidth <= 420);
+  const [isPhone, setIsPhone] = useState(window.innerWidth <= PHONE_CAPTCHA_BREAKPOINT);
   const isInvisibleCaptcha = isPhone;
   const [forceVisibleCaptcha, setForceVisibleCaptcha] = useState(false);
   const useInvisibleCaptcha = isInvisibleCaptcha && !forceVisibleCaptcha;
@@ -20,7 +21,7 @@ export default function LoginPage() {
   const [showDebug, setShowDebug] = useState(false);
 
   useEffect(() => {
-    const onResize = () => setIsPhone(window.innerWidth <= 420);
+    const onResize = () => setIsPhone(window.innerWidth <= PHONE_CAPTCHA_BREAKPOINT);
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
