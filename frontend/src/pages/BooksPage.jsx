@@ -6,6 +6,7 @@ import { useCart } from "../context/CartContext";
 export default function BooksPage() {
   const { cart, addToCart, updateQuantity, totalItems } = useCart();
   const navigate                              = useNavigate();
+  const [isPhone, setIsPhone] = useState(window.innerWidth <= 820);
   const [books,     setBooks]     = useState([]);
   const [search,    setSearch]    = useState("");
   const [available, setAvailable] = useState("");
@@ -30,6 +31,12 @@ export default function BooksPage() {
   };
 
   useEffect(() => { fetchBooks(); }, []);
+
+  useEffect(() => {
+    const onResize = () => setIsPhone(window.innerWidth <= 820);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   const handleSearch = (e) => { e.preventDefault(); fetchBooks(); };
 
@@ -114,47 +121,44 @@ export default function BooksPage() {
 
       {error && <p style={styles.error}>{error}</p>}
 
-      {/* Books Table */}
-      <table style={styles.table}>
-        <thead>
-          <tr style={styles.header}>
-            <th>Title</th><th>Author</th><th>ISBN</th>
-            <th>Location</th><th>Copies</th><th></th>
-          </tr>
-        </thead>
-        <tbody>
+      {/* Books Table / Cards */}
+      {isPhone ? (
+        <div style={styles.mobileList}>
           {books.length === 0 && (
-            <tr><td colSpan={6} style={{textAlign:"center",padding:"1rem",color:"#888"}}>
-              No books found.
-            </td></tr>
+            <div style={styles.mobileEmpty}>No books found.</div>
           )}
-          {books.map(book => {
+          {books.map((book) => {
             const inCart = cartQty(book.id);
-            const maxed  = inCart >= book.available_copies;
+            const maxed = inCart >= book.available_copies;
             return (
-              <tr key={book.id} style={styles.row}>
-                <td>{book.title}</td>
-                <td>{book.author}</td>
-                <td style={{color:"#888",fontSize:"0.85rem"}}>{book.isbn || "—"}</td>
-                <td>
+              <div key={book.id} style={styles.mobileCard}>
+                <div style={styles.mobileTitle}>{book.title}</div>
+                <div style={styles.mobileMeta}>{book.author}</div>
+                <div style={styles.mobileMeta}>ISBN: {book.isbn || "—"}</div>
+                <div style={styles.mobileRow}>
+                  <span style={styles.mobileLabel}>Location</span>
                   <span style={styles.locationTag}>{locationSummary(book)}</span>
-                </td>
-                <td>
+                </div>
+                <div style={styles.mobileRow}>
+                  <span style={styles.mobileLabel}>Copies</span>
                   <span style={book.available_copies > 0 ? styles.avail : styles.unavail}>
                     {book.available_copies}/{book.total_copies}
                   </span>
-                </td>
-                <td>
+                </div>
+                <div style={{ marginTop: "0.55rem" }}>
                   {book.available_copies < 1 ? (
                     <span style={styles.outTag}>Out of Stock</span>
                   ) : inCart > 0 ? (
                     <div style={styles.inCartRow}>
-                      <button style={styles.qtyBtn}
-                        onClick={() => updateQuantity(book.id, inCart - 1)}>−</button>
+                      <button style={styles.qtyBtn} onClick={() => updateQuantity(book.id, inCart - 1)}>−</button>
                       <span style={styles.qtyNum}>{inCart}</span>
-                      <button style={{...styles.qtyBtn, opacity: maxed ? 0.4 : 1}}
+                      <button
+                        style={{ ...styles.qtyBtn, opacity: maxed ? 0.4 : 1 }}
                         disabled={maxed}
-                        onClick={() => handleAddBookToCart(book)}>+</button>
+                        onClick={() => handleAddBookToCart(book)}
+                      >
+                        +
+                      </button>
                       <span style={styles.inCartTag}>in cart</span>
                     </div>
                   ) : (
@@ -162,12 +166,66 @@ export default function BooksPage() {
                       + Add to Cart
                     </button>
                   )}
-                </td>
-              </tr>
+                </div>
+              </div>
             );
           })}
-        </tbody>
-      </table>
+        </div>
+      ) : (
+        <table style={styles.table}>
+          <thead>
+            <tr style={styles.header}>
+              <th>Title</th><th>Author</th><th>ISBN</th>
+              <th>Location</th><th>Copies</th><th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {books.length === 0 && (
+              <tr><td colSpan={6} style={{textAlign:"center",padding:"1rem",color:"#888"}}>
+                No books found.
+              </td></tr>
+            )}
+            {books.map(book => {
+              const inCart = cartQty(book.id);
+              const maxed  = inCart >= book.available_copies;
+              return (
+                <tr key={book.id} style={styles.row}>
+                  <td>{book.title}</td>
+                  <td>{book.author}</td>
+                  <td style={{color:"#888",fontSize:"0.85rem"}}>{book.isbn || "—"}</td>
+                  <td>
+                    <span style={styles.locationTag}>{locationSummary(book)}</span>
+                  </td>
+                  <td>
+                    <span style={book.available_copies > 0 ? styles.avail : styles.unavail}>
+                      {book.available_copies}/{book.total_copies}
+                    </span>
+                  </td>
+                  <td>
+                    {book.available_copies < 1 ? (
+                      <span style={styles.outTag}>Out of Stock</span>
+                    ) : inCart > 0 ? (
+                      <div style={styles.inCartRow}>
+                        <button style={styles.qtyBtn}
+                          onClick={() => updateQuantity(book.id, inCart - 1)}>−</button>
+                        <span style={styles.qtyNum}>{inCart}</span>
+                        <button style={{...styles.qtyBtn, opacity: maxed ? 0.4 : 1}}
+                          disabled={maxed}
+                          onClick={() => handleAddBookToCart(book)}>+</button>
+                        <span style={styles.inCartTag}>in cart</span>
+                      </div>
+                    ) : (
+                      <button style={styles.addBtn} onClick={() => handleAddBookToCart(book)}>
+                        + Add to Cart
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
 
       {locationPicker.open && (
         <div style={styles.pickerOverlay} onClick={handleCancelLocationPick}>
@@ -214,6 +272,13 @@ const styles = {
                  background:"#f5f5f5", cursor:"pointer", fontWeight:"bold", fontSize:"0.95rem" },
   qtyNum:      { minWidth:20, textAlign:"center", fontWeight:"600" },
   inCartTag:   { fontSize:"0.78rem", color:"#003087", fontWeight:"600" },
+  mobileList:  { display:"grid", gap:"0.7rem" },
+  mobileCard:  { border:"1px solid #e5e7eb", borderRadius:10, background:"#fff", padding:"0.75rem" },
+  mobileTitle: { fontSize:"0.96rem", fontWeight:"700", color:"#0f172a", marginBottom:"0.2rem" },
+  mobileMeta:  { fontSize:"0.82rem", color:"#64748b", marginBottom:"0.18rem", wordBreak:"break-word" },
+  mobileRow:   { display:"flex", alignItems:"center", justifyContent:"space-between", gap:"0.5rem", marginTop:"0.35rem" },
+  mobileLabel: { fontSize:"0.8rem", color:"#475569", fontWeight:"600" },
+  mobileEmpty: { textAlign:"center", color:"#888", padding:"1rem", border:"1px dashed #d1d5db", borderRadius:8 },
   cartBtn:     { display:"flex", alignItems:"center", gap:"0.4rem", padding:"0.45rem 1rem",
                  background:"#003087", color:"#fff", border:"none", borderRadius:4,
                  cursor:"pointer", fontWeight:"600", fontSize:"0.95rem", position:"relative" },

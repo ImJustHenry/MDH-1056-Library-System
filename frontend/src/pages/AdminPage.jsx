@@ -821,42 +821,71 @@ export default function AdminPage() {
                 r.style.display = r.dataset.title.toLowerCase().includes(q) ? "" : "none";
               }); }} />
 
-          <table style={styles.table}>
-            <thead>
-              <tr style={styles.header}>
-                <th>Title</th><th>Author</th><th>ISBN</th>
-                <th>Location</th><th>Copies</th><th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {books.map(b => (
-                <tr key={b.id} style={styles.row} data-book-row="" data-title={b.title}>
-                  <td>{b.title}</td>
-                  <td>{b.author}</td>
-                  <td style={{fontSize:"0.85rem",color:"#888"}}>{b.isbn || "—"}</td>
-                  <td>
+          {isPhone ? (
+            <div style={styles.mobileBookList}>
+              {books.map((b) => (
+                <div key={b.id} style={styles.mobileBookCard} data-book-row="" data-title={b.title}>
+                  <div style={styles.mobileBookTitle}>{b.title}</div>
+                  <div style={styles.mobileBookMeta}>{b.author}</div>
+                  <div style={styles.mobileBookMeta}>ISBN: {b.isbn || "—"}</div>
+                  <div style={styles.mobileBookRow}>
+                    <span style={styles.mobileBookLabel}>Location</span>
                     <span style={styles.badge}>{locationSummary(b)}</span>
-                  </td>
-                  <td>
+                  </div>
+                  <div style={styles.mobileBookRow}>
+                    <span style={styles.mobileBookLabel}>Copies</span>
                     <span style={{
                       fontWeight:"600",
                       color: b.available_copies === 0 ? "#c00" : b.available_copies < b.total_copies ? "#b86000" : "#080"
                     }}>
                       {b.available_copies}/{b.total_copies}
                     </span>
-                  </td>
-                  <td>
-                    <div style={styles.rowActions}>
-                      <button style={styles.btnSecondary}
-                        onClick={() => handleEditBook(b)}>Edit</button>
-                      <button style={styles.btnDanger}
-                        onClick={() => handleDelete(b.id, b.title)}>Delete</button>
-                    </div>
-                  </td>
-                </tr>
+                  </div>
+                  <div style={{ ...styles.rowActions, marginTop:"0.6rem" }}>
+                    <button style={styles.btnSecondary} onClick={() => handleEditBook(b)}>Edit</button>
+                    <button style={styles.btnDanger} onClick={() => handleDelete(b.id, b.title)}>Delete</button>
+                  </div>
+                </div>
               ))}
-            </tbody>
-          </table>
+            </div>
+          ) : (
+            <table style={styles.table}>
+              <thead>
+                <tr style={styles.header}>
+                  <th>Title</th><th>Author</th><th>ISBN</th>
+                  <th>Location</th><th>Copies</th><th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {books.map(b => (
+                  <tr key={b.id} style={styles.row} data-book-row="" data-title={b.title}>
+                    <td>{b.title}</td>
+                    <td>{b.author}</td>
+                    <td style={{fontSize:"0.85rem",color:"#888"}}>{b.isbn || "—"}</td>
+                    <td>
+                      <span style={styles.badge}>{locationSummary(b)}</span>
+                    </td>
+                    <td>
+                      <span style={{
+                        fontWeight:"600",
+                        color: b.available_copies === 0 ? "#c00" : b.available_copies < b.total_copies ? "#b86000" : "#080"
+                      }}>
+                        {b.available_copies}/{b.total_copies}
+                      </span>
+                    </td>
+                    <td>
+                      <div style={styles.rowActions}>
+                        <button style={styles.btnSecondary}
+                          onClick={() => handleEditBook(b)}>Edit</button>
+                        <button style={styles.btnDanger}
+                          onClick={() => handleDelete(b.id, b.title)}>Delete</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
 
           {/* Admin checkout on behalf of user */}
           <h3 style={{marginTop:"2rem"}}>Checkout Book(s) for User</h3>
@@ -1117,28 +1146,50 @@ export default function AdminPage() {
       {tab === "checkouts" && (
         <>
           <h3>Currently Checked Out</h3>
-          <table style={styles.table}>
-            <thead>
-              <tr style={styles.header}>
-                <th>Book</th><th>User</th><th>Location</th><th>Checked Out</th>
-              </tr>
-            </thead>
-            <tbody>
+          {isPhone ? (
+            <div style={styles.mobileCheckoutList}>
               {checkouts.length === 0 && (
-                <tr><td colSpan={4} style={{textAlign:"center",padding:"1rem",color:"#888"}}>
-                  Nothing checked out.
-                </td></tr>
+                <div style={styles.mobileBookEmpty}>Nothing checked out.</div>
               )}
-              {checkouts.map(c => (
-                <tr key={c.id} style={styles.row}>
-                  <td>{c.book_title}</td>
-                  <td>{c.user_email}</td>
-                  <td><span style={styles.badge}>{c.book_location || "—"}</span></td>
-                  <td>{fmt(c.checked_out_at)}</td>
-                </tr>
+              {checkouts.map((c) => (
+                <div key={c.id} style={styles.mobileCheckoutCard}>
+                  <div style={styles.mobileBookTitle}>{c.book_title}</div>
+                  <div style={styles.mobileBookMeta}>User: {c.user_email}</div>
+                  <div style={styles.mobileBookRow}>
+                    <span style={styles.mobileBookLabel}>Location</span>
+                    <span style={styles.badge}>{c.book_location || "—"}</span>
+                  </div>
+                  <div style={styles.mobileBookRow}>
+                    <span style={styles.mobileBookLabel}>Checked Out</span>
+                    <span style={styles.mobileCheckoutDate}>{fmt(c.checked_out_at)}</span>
+                  </div>
+                </div>
               ))}
-            </tbody>
-          </table>
+            </div>
+          ) : (
+            <table style={styles.table}>
+              <thead>
+                <tr style={styles.header}>
+                  <th>Book</th><th>User</th><th>Location</th><th>Checked Out</th>
+                </tr>
+              </thead>
+              <tbody>
+                {checkouts.length === 0 && (
+                  <tr><td colSpan={4} style={{textAlign:"center",padding:"1rem",color:"#888"}}>
+                    Nothing checked out.
+                  </td></tr>
+                )}
+                {checkouts.map(c => (
+                  <tr key={c.id} style={styles.row}>
+                    <td>{c.book_title}</td>
+                    <td>{c.user_email}</td>
+                    <td><span style={styles.badge}>{c.book_location || "—"}</span></td>
+                    <td>{fmt(c.checked_out_at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </>
       )}
 
@@ -1244,6 +1295,16 @@ const styles = {
   chipContainer: { display:"flex", flexWrap:"wrap", gap:"0.4rem", marginBottom:"0.75rem",
                    padding:"0.5rem", background:"#f8f9ff", borderRadius:"6px",
                    border:"1px solid #d0d8f0" },
+  mobileBookList: { display:"grid", gap:"0.7rem" },
+  mobileBookCard: { border:"1px solid #e5e7eb", borderRadius:10, background:"#fff", padding:"0.75rem" },
+  mobileBookTitle: { fontSize:"0.95rem", fontWeight:"700", color:"#0f172a", marginBottom:"0.2rem" },
+  mobileBookMeta: { fontSize:"0.82rem", color:"#64748b", marginBottom:"0.2rem", wordBreak:"break-word" },
+  mobileBookRow: { display:"flex", alignItems:"center", justifyContent:"space-between", gap:"0.5rem", marginTop:"0.35rem" },
+  mobileBookLabel: { fontSize:"0.8rem", color:"#475569", fontWeight:"600" },
+  mobileBookEmpty: { textAlign:"center", color:"#888", padding:"1rem", border:"1px dashed #d1d5db", borderRadius:8 },
+  mobileCheckoutList: { display:"grid", gap:"0.7rem" },
+  mobileCheckoutCard: { border:"1px solid #e5e7eb", borderRadius:10, background:"#fff", padding:"0.75rem" },
+  mobileCheckoutDate: { fontSize:"0.85rem", color:"#0f172a", fontWeight:"600" },
   scannerWrap: { marginBottom:"1.25rem", border:"1px solid #dbe3f1", borderRadius:"10px", padding:"0.8rem", background:"#f8fbff" },
   scannerHeader: { display:"flex", justifyContent:"space-between", alignItems:"center", gap:"0.5rem" },
   scannerHint: { margin:"0.45rem 0 0.6rem", color:"#45556f", fontSize:"0.86rem" },
