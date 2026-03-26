@@ -26,6 +26,7 @@ export default function AdminPage() {
   const zxingReaderRef = useRef(null);
   const zxingControlsRef = useRef(null);
   const scanLockRef = useRef(false);
+  const scannerStockResolveRef = useRef(null);
 
   // Edit book modal
   const [editingBook,  setEditingBook]  = useState(null);
@@ -39,6 +40,12 @@ export default function AdminPage() {
   const [bookSearch,    setBookSearch]    = useState("");
   const [bookDropdown,  setBookDropdown]  = useState(false);
   const [hoveredBookId, setHoveredBookId] = useState(null);
+  const [scannerStockModal, setScannerStockModal] = useState({
+    open: false,
+    location_code: "A1",
+    quantity: 1,
+    title: "",
+  });
 
   const fetchBooks = async () => {
     try { const { data } = await api.get("/books"); setBooks(data); }
@@ -216,35 +223,27 @@ export default function AdminPage() {
     };
   };
 
-  const promptStockPlacement = (book, defaultQuantity = 1) => {
-    const defaultLocation = (form.location_code || book.location_code || "A1").toUpperCase();
-    const locationInput = window.prompt(
-      `Enter shelf location (${SHELF_OPTIONS.join(", ")})`,
-      defaultLocation
-    );
+  const requestScannerStockPlacement = ({
+    title,
+    defaultLocation,
+    defaultQuantity = 1,
+  }) => {
+    return new Promise((resolve) => {
+      scannerStockResolveRef.current = resolve;
+      setScannerStockModal({
+        open: true,
+        title: title || "Scanned book",
+        location_code: (defaultLocation || "A1").toUpperCase(),
+        quantity: Math.max(1, Number(defaultQuantity) || 1),
+      });
+    });
+  };
 
-    if (locationInput === null) return null;
-
-    const normalized = String(locationInput).trim().toUpperCase();
-    if (!SHELF_OPTIONS.includes(normalized)) {
-      setError(`Invalid location. Please use one of: ${SHELF_OPTIONS.join(", ")}`);
-      return false;
-    }
-
-    const quantityInput = window.prompt(
-      "Enter stock quantity to add (minimum 1)",
-      String(Math.max(1, Number(defaultQuantity) || 1))
-    );
-
-    if (quantityInput === null) return null;
-
-    const quantity = Number.parseInt(String(quantityInput).trim(), 10);
-    if (!Number.isInteger(quantity) || quantity < 1) {
-      setError("Stock quantity must be a whole number of at least 1.");
-      return false;
-    }
-
-    return { locationCode: normalized, quantity };
+  const closeScannerStockModal = (result) => {
+    const resolver = scannerStockResolveRef.current;
+    scannerStockResolveRef.current = null;
+    setScannerStockModal((prev) => ({ ...prev, open: false }));
+    if (resolver) resolver(result);
   };
 
   const addCopyToExistingBook = async (book, locationOverride, quantity = 1) => {
@@ -276,12 +275,13 @@ export default function AdminPage() {
         }
       }
 
-      const placement = promptStockPlacement(existing, 1);
+      const placement = await requestScannerStockPlacement({
+        title: existing.title,
+        defaultLocation: form.location_code || existing.location_code || "A1",
+        defaultQuantity: 1,
+      });
       if (placement === null) {
         setMsg("Duplicate ISBN skipped.");
-        return false;
-      }
-      if (!placement) {
         return false;
       }
 
@@ -319,12 +319,13 @@ export default function AdminPage() {
       }
     }
 
-    const placement = promptStockPlacement({ location_code: form.location_code || "A1" }, form.total_copies || 1);
+    const placement = await requestScannerStockPlacement({
+      title: details.title,
+      defaultLocation: form.location_code || "A1",
+      defaultQuantity: form.total_copies || 1,
+    });
     if (placement === null) {
       setMsg("Scanned book skipped.");
-      return false;
-    }
-    if (!placement) {
       return false;
     }
 
@@ -376,12 +377,13 @@ export default function AdminPage() {
 
       if (existing) {
         try {
-          const placement = promptStockPlacement(existing, 1);
+          const placement = await requestScannerStockPlacement({
+            title: existing.title,
+            defaultLocation: form.location_code || existing.location_code || "A1",
+            defaultQuantity: 1,
+          });
           if (placement === null) {
             setMsg("Duplicate ISBN skipped.");
-            return;
-          }
-          if (!placement) {
             return;
           }
 
@@ -408,12 +410,13 @@ export default function AdminPage() {
           const proceed = window.confirm("This ISBN has been scanned before. Do you want to add more stock copies?");
           if (proceed) {
             try {
-              const placement = promptStockPlacement(matched, 1);
+              const placement = await requestScannerStockPlacement({
+                title: matched.title,
+                defaultLocation: form.location_code || matched.location_code || "A1",
+                defaultQuantity: 1,
+              });
               if (placement === null) {
                 setMsg("Duplicate ISBN skipped.");
-                return;
-              }
-              if (!placement) {
                 return;
               }
 
@@ -1057,6 +1060,59 @@ export default function AdminPage() {
         </div>
       )}
 
+      {/* ── SCANNER STOCK MODAL ───────────────────────────────────── */}
+      {scannerStockModal.open && (
+        <div style={styles.modalOverlay} onClick={() => closeScannerStockModal(null)}>
+          <div style={styles.scannerStockModalContent} onClick={e => e.stopPropagation()}>
+            <h3 style={{ margin:"0 0 0.35rem" }}>Scanned Book Placement</h3>
+            <p style={styles.scannerStockSub}>Choose where to place stock for: <strong>{scannerStockModal.title}</strong></p>
+
+            <div style={styles.scannerStockFields}>
+              <div>
+                <label style={styles.label}>Shelf Location</label>
+                <select
+                  style={styles.modalInput}
+                  value={scannerStockModal.location_code}
+                  onChange={e => setScannerStockModal(prev => ({ ...prev, location_code: e.target.value }))}
+                >
+                  {SHELF_OPTIONS.map(loc => <option key={loc} value={loc}>{loc}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={styles.label}>Stock Quantity</label>
+                <input
+                  style={styles.modalInput}
+                  type="number"
+                  min="1"
+                  value={scannerStockModal.quantity}
+                  onChange={e => setScannerStockModal(prev => ({ ...prev, quantity: e.target.value }))}
+                />
+              </div>
+            </div>
+
+            <div style={styles.scannerStockActions}>
+              <button style={{ ...styles.btn, background:"#888" }} onClick={() => closeScannerStockModal(null)}>Cancel</button>
+              <button
+                style={styles.btn}
+                onClick={() => {
+                  const quantity = Number.parseInt(String(scannerStockModal.quantity), 10);
+                  if (!Number.isInteger(quantity) || quantity < 1) {
+                    setError("Stock quantity must be a whole number of at least 1.");
+                    return;
+                  }
+                  closeScannerStockModal({
+                    locationCode: scannerStockModal.location_code,
+                    quantity,
+                  });
+                }}
+              >
+                Apply
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── CHECKOUTS TAB ────────────────────────────────────────────── */}
       {tab === "checkouts" && (
         <>
@@ -1163,6 +1219,10 @@ const styles = {
   radioLabel: { display:"flex", alignItems:"center", gap:"0.5rem", fontSize:"0.92rem", color:"#333" },
   locationRowsWrap: { display:"grid", gap:"0.5rem", marginTop:"0.25rem" },
   locationRow: { display:"grid", gridTemplateColumns:"1fr 120px auto", gap:"0.5rem", alignItems:"center" },
+  scannerStockModalContent: { background:"#fff", borderRadius:"10px", padding:"1.25rem", maxWidth:"440px", width:"92vw", boxShadow:"0 20px 60px rgba(0,0,0,0.3)" },
+  scannerStockSub: { margin:"0 0 0.9rem", color:"#475569", fontSize:"0.9rem" },
+  scannerStockFields: { display:"grid", gridTemplateColumns:"1fr 1fr", gap:"0.65rem", marginBottom:"1rem" },
+  scannerStockActions: { display:"flex", justifyContent:"flex-end", gap:"0.5rem" },
   locationHint: { margin:"0.1rem 0 0", color:"#666", fontSize:"0.82rem" },
   locationHintMuted: { margin:"0.35rem 0 0", color:"#6b7280", fontSize:"0.78rem" },
   locationError: { margin:"0.2rem 0 0", color:"#b91c1c", fontSize:"0.82rem", fontWeight:"600" },
