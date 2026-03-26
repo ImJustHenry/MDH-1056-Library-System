@@ -12,6 +12,7 @@ export default function LoginPage() {
   const [isPhone, setIsPhone] = useState(window.innerWidth <= 420);
   const isInvisibleCaptcha = isPhone;
   const [captchaRenderKey, setCaptchaRenderKey] = useState(0);
+  const [captchaAutoRetryCount, setCaptchaAutoRetryCount] = useState(0);
   const [captchaLoadError, setCaptchaLoadError] = useState("");
   const [captchaReady, setCaptchaReady] = useState(false);
 
@@ -74,8 +75,13 @@ export default function LoginPage() {
     setCaptchaLoadError("");
     setCaptchaToken("");
     setCaptchaReady(false);
+    setCaptchaAutoRetryCount(0);
     setCaptchaRenderKey(prev => prev + 1);
   };
+
+  useEffect(() => {
+    setCaptchaAutoRetryCount(0);
+  }, [isPhone]);
 
   useEffect(() => {
     setCaptchaReady(false);
@@ -86,11 +92,16 @@ export default function LoginPage() {
   useEffect(() => {
     if (captchaReady || captchaLoadError) return;
     const timer = window.setTimeout(() => {
+      if (captchaAutoRetryCount < 1) {
+        setCaptchaAutoRetryCount(prev => prev + 1);
+        setCaptchaRenderKey(prev => prev + 1);
+        return;
+      }
       setCaptchaLoadError("CAPTCHA is taking too long to load. Tap Retry.");
     }, 10000);
 
     return () => window.clearTimeout(timer);
-  }, [captchaReady, captchaLoadError, captchaRenderKey, isPhone]);
+  }, [captchaReady, captchaLoadError, captchaRenderKey, isPhone, captchaAutoRetryCount]);
 
   return (
     <div style={styles.wrapper}>
