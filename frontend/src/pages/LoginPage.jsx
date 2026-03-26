@@ -83,6 +83,15 @@ export default function LoginPage() {
     setCaptchaToken("");
   }, [isPhone, captchaRenderKey]);
 
+  useEffect(() => {
+    if (captchaReady || captchaLoadError) return;
+    const timer = window.setTimeout(() => {
+      setCaptchaLoadError("CAPTCHA is taking too long to load. Tap Retry.");
+    }, 10000);
+
+    return () => window.clearTimeout(timer);
+  }, [captchaReady, captchaLoadError, captchaRenderKey, isPhone]);
+
   return (
     <div style={styles.wrapper}>
       <div style={styles.card(isPhone)}>
@@ -123,8 +132,8 @@ export default function LoginPage() {
                 }}
               />
             </div>
-            {isInvisibleCaptcha && !captchaReady && !captchaLoadError && (
-              <div style={styles.mobileCaptchaHint}>
+            {!captchaReady && !captchaLoadError && (
+              <div style={styles.captchaHint}>
                 Loading human verification…
               </div>
             )}
@@ -168,7 +177,7 @@ const styles = {
              border:"1px solid #003087", borderRadius:"4px", fontSize:"0.82rem", cursor:"pointer" },
   captchaShell: { marginBottom:"1rem", minHeight:"84px" },
   captchaWrap: { marginBottom:"1rem", display:"flex", justifyContent:"center" },
-  mobileCaptchaHint: { marginTop:"-0.2rem", marginBottom:"0.4rem", color:"#4b5563", fontSize:"0.8rem", textAlign:"center" },
+  captchaHint: { marginTop:"-0.2rem", marginBottom:"0.4rem", color:"#4b5563", fontSize:"0.8rem", textAlign:"center" },
   captchaErrorRow: { marginTop:"0.4rem", display:"flex", alignItems:"center", justifyContent:"space-between", gap:"0.5rem" },
   captchaErrorText: { color:"#b91c1c", fontSize:"0.8rem", lineHeight:1.3 },
   error:   { background:"#ffeaea", color:"#c00", padding:"0.6rem 0.75rem",
