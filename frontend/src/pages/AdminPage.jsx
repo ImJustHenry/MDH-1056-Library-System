@@ -216,36 +216,50 @@ export default function AdminPage() {
     };
   };
 
-  const promptLocationForStockCopy = (book) => {
+  const promptStockPlacement = (book, defaultQuantity = 1) => {
     const defaultLocation = (form.location_code || book.location_code || "A1").toUpperCase();
-    const input = window.prompt(
-      `Enter shelf location for the new stock copy (${SHELF_OPTIONS.join(", ")})`,
+    const locationInput = window.prompt(
+      `Enter shelf location (${SHELF_OPTIONS.join(", ")})`,
       defaultLocation
     );
 
-    if (input === null) return null;
+    if (locationInput === null) return null;
 
-    const normalized = String(input).trim().toUpperCase();
+    const normalized = String(locationInput).trim().toUpperCase();
     if (!SHELF_OPTIONS.includes(normalized)) {
       setError(`Invalid location. Please use one of: ${SHELF_OPTIONS.join(", ")}`);
-      return "";
+      return false;
     }
 
-    return normalized;
+    const quantityInput = window.prompt(
+      "Enter stock quantity to add (minimum 1)",
+      String(Math.max(1, Number(defaultQuantity) || 1))
+    );
+
+    if (quantityInput === null) return null;
+
+    const quantity = Number.parseInt(String(quantityInput).trim(), 10);
+    if (!Number.isInteger(quantity) || quantity < 1) {
+      setError("Stock quantity must be a whole number of at least 1.");
+      return false;
+    }
+
+    return { locationCode: normalized, quantity };
   };
 
-  const addCopyToExistingBook = async (book, locationOverride) => {
+  const addCopyToExistingBook = async (book, locationOverride, quantity = 1) => {
     const targetLocation = (locationOverride || form.location_code || book.location_code || "A1").toUpperCase();
+    const qty = Number.isInteger(Number(quantity)) ? Math.max(1, Number(quantity)) : 1;
     const nextCounts = { ...(book.location_counts || {}) };
-    nextCounts[targetLocation] = Number(nextCounts[targetLocation] || 0) + 1;
+    nextCounts[targetLocation] = Number(nextCounts[targetLocation] || 0) + qty;
 
     await api.put(`/books/${book.id}`, {
-      total_copies: Number(book.total_copies || 0) + 1,
+      total_copies: Number(book.total_copies || 0) + qty,
       location_code: targetLocation,
       location_counts: nextCounts,
     });
 
-    setMsg(`Added 1 more copy for "${book.title}" at ${targetLocation}.`);
+    setMsg(`Added ${qty} more ${qty === 1 ? "copy" : "copies"} for "${book.title}" at ${targetLocation}.`);
     await fetchBooks();
   };
 
@@ -255,23 +269,23 @@ export default function AdminPage() {
     const existing = await findExistingBookByIsbn(isbnToStore);
     if (existing) {
       if (!skipDuplicateConfirm) {
-        const proceed = window.confirm("This ISBN has been scanned before. Do you want to add 1 more stock copy?");
+        const proceed = window.confirm("This ISBN has been scanned before. Do you want to add more stock copies?");
         if (!proceed) {
           setMsg("Duplicate ISBN skipped.");
           return false;
         }
       }
 
-      const selectedLocation = promptLocationForStockCopy(existing);
-      if (selectedLocation === null) {
+      const placement = promptStockPlacement(existing, 1);
+      if (placement === null) {
         setMsg("Duplicate ISBN skipped.");
         return false;
       }
-      if (!selectedLocation) {
+      if (!placement) {
         return false;
       }
 
-      await addCopyToExistingBook(existing, selectedLocation);
+      await addCopyToExistingBook(existing, placement.locationCode, placement.quantity);
       return true;
     }
 
@@ -305,17 +319,36 @@ export default function AdminPage() {
       }
     }
 
+    const placement = promptStockPlacement({ location_code: form.location_code || "A1" }, form.total_copies || 1);
+    if (placement === null) {
+      setMsg("Scanned book skipped.");
+      return false;
+    }
+    if (!placement) {
+      return false;
+    }
+
     const payload = {
       title: details.title,
       author: details.author,
       isbn: isbnToStore,
-      total_copies: 1,
-      location_code: form.location_code || "A1",
+      total_copies: placement.quantity,
+      location_code: placement.locationCode,
+      location_counts: {
+        [placement.locationCode]: placement.quantity,
+      },
     };
 
     await api.post("/books", payload);
-    setForm((prev) => ({ ...prev, title: details.title, author: details.author, isbn: isbnToStore, total_copies: 1 }));
-    setMsg(`Added "${details.title}" by ${details.author} from barcode.`);
+    setForm((prev) => ({
+      ...prev,
+      title: details.title,
+      author: details.author,
+      isbn: isbnToStore,
+      total_copies: placement.quantity,
+      location_code: placement.locationCode,
+    }));
+    setMsg(`Added "${details.title}" by ${details.author} from barcode (${placement.quantity} ${placement.quantity === 1 ? "copy" : "copies"} at ${placement.locationCode}).`);
     await fetchBooks();
     return true;
   };
@@ -335,7 +368,7 @@ export default function AdminPage() {
     const alreadyScanned = scannedBarcodes.includes(isbnForMatching);
 
     if (existing || alreadyScanned) {
-      const proceed = window.confirm("This ISBN has been scanned before. Do you want to add 1 more stock copy?");
+      const proceed = window.confirm("This ISBN has been scanned before. Do you want to add more stock copies?");
       if (!proceed) {
         setMsg("Duplicate ISBN skipped.");
         return;
@@ -343,16 +376,16 @@ export default function AdminPage() {
 
       if (existing) {
         try {
-          const selectedLocation = promptLocationForStockCopy(existing);
-          if (selectedLocation === null) {
+          const placement = promptStockPlacement(existing, 1);
+          if (placement === null) {
             setMsg("Duplicate ISBN skipped.");
             return;
           }
-          if (!selectedLocation) {
+          if (!placement) {
             return;
           }
 
-          await addCopyToExistingBook(existing, selectedLocation);
+          await addCopyToExistingBook(existing, placement.locationCode, placement.quantity);
           if (!scannedBarcodes.includes(isbnForMatching)) {
             setScannedBarcodes((prev) => [...prev, isbnForMatching]);
           }
@@ -372,19 +405,19 @@ export default function AdminPage() {
       if (err.response?.status === 409 && /isbn/i.test(err.response?.data?.error || "")) {
         const matched = await findExistingBookByIsbn(isbnForMatching);
         if (matched) {
-          const proceed = window.confirm("This ISBN has been scanned before. Do you want to add 1 more stock copy?");
+          const proceed = window.confirm("This ISBN has been scanned before. Do you want to add more stock copies?");
           if (proceed) {
             try {
-              const selectedLocation = promptLocationForStockCopy(matched);
-              if (selectedLocation === null) {
+              const placement = promptStockPlacement(matched, 1);
+              if (placement === null) {
                 setMsg("Duplicate ISBN skipped.");
                 return;
               }
-              if (!selectedLocation) {
+              if (!placement) {
                 return;
               }
 
-              await addCopyToExistingBook(matched, selectedLocation);
+              await addCopyToExistingBook(matched, placement.locationCode, placement.quantity);
               setScannedBarcodes((prev) => (prev.includes(isbnForMatching) ? prev : [...prev, isbnForMatching]));
               return;
             } catch (copyErr) {
