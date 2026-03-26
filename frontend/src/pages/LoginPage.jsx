@@ -11,6 +11,8 @@ export default function LoginPage() {
   const captchaRef = useRef(null);
   const [isPhone, setIsPhone] = useState(window.innerWidth <= 420);
   const isInvisibleCaptcha = isPhone;
+  const [forceVisibleCaptcha, setForceVisibleCaptcha] = useState(false);
+  const useInvisibleCaptcha = isInvisibleCaptcha && !forceVisibleCaptcha;
   const [captchaRenderKey, setCaptchaRenderKey] = useState(0);
   const [captchaAutoRetryCount, setCaptchaAutoRetryCount] = useState(0);
   const [captchaLoadError, setCaptchaLoadError] = useState("");
@@ -31,7 +33,7 @@ export default function LoginPage() {
   const handleSubmit = async () => {
     setError("");
 
-    if (isInvisibleCaptcha && !captchaReady) {
+    if (useInvisibleCaptcha && !captchaReady) {
       setError("Human verification is still loading. Please wait a moment.");
       return;
     }
@@ -39,12 +41,22 @@ export default function LoginPage() {
     setLoading(true);
 
     let tokenToUse = captchaToken;
-    if (!tokenToUse && isInvisibleCaptcha) {
+    if (!tokenToUse && useInvisibleCaptcha) {
       try {
         tokenToUse = await captchaRef.current?.executeAsync();
         setCaptchaToken(tokenToUse || "");
       } catch {
         tokenToUse = "";
+      }
+
+      if (!tokenToUse) {
+        setLoading(false);
+        setForceVisibleCaptcha(true);
+        setCaptchaReady(false);
+        setCaptchaToken("");
+        setCaptchaRenderKey(prev => prev + 1);
+        setError("Phone verification switched to manual mode. Please complete the CAPTCHA and try again.");
+        return;
       }
     }
 
@@ -76,11 +88,13 @@ export default function LoginPage() {
     setCaptchaToken("");
     setCaptchaReady(false);
     setCaptchaAutoRetryCount(0);
+    setForceVisibleCaptcha(false);
     setCaptchaRenderKey(prev => prev + 1);
   };
 
   useEffect(() => {
     setCaptchaAutoRetryCount(0);
+    setForceVisibleCaptcha(false);
   }, [isPhone]);
 
   useEffect(() => {
@@ -97,11 +111,18 @@ export default function LoginPage() {
         setCaptchaRenderKey(prev => prev + 1);
         return;
       }
+      if (isPhone && !forceVisibleCaptcha) {
+        setForceVisibleCaptcha(true);
+        setCaptchaReady(false);
+        setCaptchaToken("");
+        setCaptchaRenderKey(prev => prev + 1);
+        return;
+      }
       setCaptchaLoadError("CAPTCHA is taking too long to load. Tap Retry.");
     }, 10000);
 
     return () => window.clearTimeout(timer);
-  }, [captchaReady, captchaLoadError, captchaRenderKey, isPhone, captchaAutoRetryCount]);
+  }, [captchaReady, captchaLoadError, captchaRenderKey, isPhone, captchaAutoRetryCount, forceVisibleCaptcha]);
 
   return (
     <div style={styles.wrapper}>
@@ -128,8 +149,8 @@ export default function LoginPage() {
                 key={`${isPhone ? "phone" : "desktop"}-${captchaRenderKey}`}
                 ref={captchaRef}
                 sitekey={SITE_KEY}
-                size={isInvisibleCaptcha ? "invisible" : "normal"}
-                badge={isInvisibleCaptcha ? "bottomright" : undefined}
+                size={useInvisibleCaptcha ? "invisible" : "normal"}
+                badge={useInvisibleCaptcha ? "bottomright" : undefined}
                 asyncScriptOnLoad={() => {
                   setCaptchaReady(true);
                   setCaptchaLoadError("");
@@ -139,6 +160,11 @@ export default function LoginPage() {
                 onErrored={() => {
                   setCaptchaReady(false);
                   setCaptchaToken("");
+                  if (isPhone && !forceVisibleCaptcha) {
+                    setForceVisibleCaptcha(true);
+                    setCaptchaRenderKey(prev => prev + 1);
+                    return;
+                  }
                   setCaptchaLoadError("CAPTCHA failed to load on this network/browser. Tap Retry.");
                 }}
               />
@@ -146,6 +172,11 @@ export default function LoginPage() {
             {!captchaReady && !captchaLoadError && (
               <div style={styles.captchaHint}>
                 Loading human verification…
+              </div>
+            )}
+            {isPhone && forceVisibleCaptcha && !captchaLoadError && (
+              <div style={styles.captchaHint}>
+                Switched to manual verification mode for better phone compatibility.
               </div>
             )}
             {captchaLoadError && (
