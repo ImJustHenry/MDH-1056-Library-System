@@ -17,6 +17,7 @@ export default function LoginPage() {
   const [captchaAutoRetryCount, setCaptchaAutoRetryCount] = useState(0);
   const [captchaLoadError, setCaptchaLoadError] = useState("");
   const [captchaReady, setCaptchaReady] = useState(false);
+  const [showDebug, setShowDebug] = useState(false);
 
   useEffect(() => {
     const onResize = () => setIsPhone(window.innerWidth <= 420);
@@ -215,6 +216,24 @@ export default function LoginPage() {
         <p style={{...styles.footer, marginTop:"0.5rem"}}>
           <Link to="/forgot-password">Forgot password?</Link>
         </p>
+
+        <button type="button" style={styles.debugToggle} onClick={() => setShowDebug(!showDebug)}>
+          {showDebug ? "Hide Debug" : "Show Debug"}
+        </button>
+
+        {showDebug && (
+          <div style={styles.debugPanel}>
+            <strong>📱 Debug Info:</strong>
+            <div>Window width: {window.innerWidth}px</div>
+            <div>isPhone: {isPhone ? "✓ Yes" : "✗ No"}</div>
+            <div>CAPTCHA mode: {useInvisibleCaptcha ? "Invisible" : "Visible"}</div>
+            <div>forceVisibleCaptcha: {forceVisibleCaptcha ? "✓ ON" : "✗ OFF"}</div>
+            <div>captchaReady: {captchaReady ? "✓ YES" : "✗ NO"}</div>
+            <div>captchaToken: {captchaToken ? `✓ Got ${captchaToken.substring(0, 10)}...` : "✗ None"}</div>
+            <div>error: {error ? `⚠️ ${error}` : "None"}</div>
+            <div>loading: {loading ? "✓ Yes" : "✗ No"}</div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -243,4 +262,8 @@ const styles = {
   error:   { background:"#ffeaea", color:"#c00", padding:"0.6rem 0.75rem",
              borderRadius:"4px", marginBottom:"1rem", fontSize:"0.9rem" },
   footer:  { textAlign:"center", marginTop:"1rem", fontSize:"0.9rem" },
+  debugToggle: { width:"100%", padding:"0.5rem", marginTop:"1rem", background:"#f0f0f0", 
+               color:"#333", border:"1px solid #ccc", borderRadius:"4px", fontSize:"0.8rem", cursor:"pointer" },
+  debugPanel: { background:"#f8f8f8", border:"1px solid #ddd", borderRadius:"4px", padding:"0.75rem", 
+              marginTop:"0.75rem", fontSize:"0.75rem", fontFamily:"monospace", color:"#333", lineHeight:"1.5" },
 };
