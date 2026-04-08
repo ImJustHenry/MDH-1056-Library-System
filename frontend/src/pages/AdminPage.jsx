@@ -431,6 +431,26 @@ export default function AdminPage() {
     }
   };
 
+  const handleManualIsbnEntry = async () => {
+    const rawInput = window.prompt("Enter an ISBN-10 or ISBN-13:", "");
+    if (rawInput === null) return;
+
+    const manualIsbn = normalizeIsbn(rawInput);
+    if (!manualIsbn) {
+      setError("ISBN is required.");
+      return;
+    }
+
+    if (manualIsbn.length !== 10 && manualIsbn.length !== 13) {
+      setError("Enter a valid ISBN-10 or ISBN-13.");
+      return;
+    }
+
+    setError("");
+    setMsg("");
+    await handleBarcodeDetected(manualIsbn);
+  };
+
   const startScanner = async () => {
     setScannerError("");
     if (!("mediaDevices" in navigator) || !("getUserMedia" in navigator.mediaDevices)) {
@@ -783,6 +803,12 @@ export default function AdminPage() {
             </select>
             <button style={styles.btn} type="submit">Add Book</button>
           </form>
+
+          <div style={styles.quickAddActions}>
+            <button type="button" style={styles.btnSecondary} onClick={handleManualIsbnEntry}>
+              Type ISBN Instead of Scanning
+            </button>
+          </div>
 
           {isPhone && (
             <div style={styles.scannerWrap}>
@@ -1301,6 +1327,7 @@ const styles = {
   mobileCheckoutCard: { border:"1px solid #e5e7eb", borderRadius:10, background:"#fff", padding:"0.75rem" },
   mobileCheckoutDate: { fontSize:"0.85rem", color:"#0f172a", fontWeight:"600" },
   scannerWrap: { marginBottom:"1.25rem", border:"1px solid #dbe3f1", borderRadius:"10px", padding:"0.8rem", background:"#f8fbff" },
+  quickAddActions: { marginBottom:"1rem", display:"flex", gap:"0.5rem", flexWrap:"wrap" },
   scannerHeader: { display:"flex", justifyContent:"space-between", alignItems:"center", gap:"0.5rem" },
   scannerHint: { margin:"0.45rem 0 0.6rem", color:"#45556f", fontSize:"0.86rem" },
   scannerPreviewWrap: { borderRadius:"8px", overflow:"hidden", border:"1px solid #cbd5e1", background:"#111827" },
