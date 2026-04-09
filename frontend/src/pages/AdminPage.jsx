@@ -111,6 +111,34 @@ export default function AdminPage() {
     return `${body}${checkDigit}`;
   };
 
+  const sbnToIsbn10 = (rawSbn) => {
+    const code = normalizeIsbn(rawSbn);
+
+    if (/^\d{8}$/.test(code)) {
+      const base = `0${code}`;
+      const checksum = base
+        .split("")
+        .map(Number)
+        .reduce((sum, digit, index) => sum + digit * (10 - index), 0);
+      const checkValue = (11 - (checksum % 11)) % 11;
+      const checkDigit = checkValue === 10 ? "X" : String(checkValue);
+      return `${base}${checkDigit}`;
+    }
+
+    if (/^\d{8}[\dX]$/.test(code)) {
+      const base = `0${code.slice(0, 8)}`;
+      const checksum = base
+        .split("")
+        .map(Number)
+        .reduce((sum, digit, index) => sum + digit * (10 - index), 0);
+      const checkValue = (11 - (checksum % 11)) % 11;
+      const checkDigit = checkValue === 10 ? "X" : String(checkValue);
+      return `${base}${checkDigit}`;
+    }
+
+    return "";
+  };
+
   const getIsbnVariants = (rawCode) => {
     const code = normalizeIsbn(rawCode);
     if (!code) return [];
@@ -437,19 +465,26 @@ export default function AdminPage() {
     const rawInput = window.prompt("Enter an ISBN-10 or ISBN-13:", "");
     if (rawInput === null) return;
 
-    const manualIsbn = normalizeIsbn(rawInput);
-    if (!manualIsbn) {
+    const normalizedInput = normalizeIsbn(rawInput);
+    if (!normalizedInput) {
       setError("ISBN is required.");
       return;
     }
 
+    const convertedFromSbn = sbnToIsbn10(normalizedInput);
+    const manualIsbn = convertedFromSbn || normalizedInput;
+
     if (manualIsbn.length !== 10 && manualIsbn.length !== 13) {
-      setError("Enter a valid ISBN-10 or ISBN-13.");
+      setError("Enter a valid ISBN-10, ISBN-13, or SBN.");
       return;
     }
 
     setError("");
-    setMsg("");
+    if (convertedFromSbn) {
+      setMsg(`Converted SBN to ISBN: ${convertedFromSbn}`);
+    } else {
+      setMsg("");
+    }
     await handleBarcodeDetected(manualIsbn);
   };
 
