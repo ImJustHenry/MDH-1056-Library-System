@@ -11,6 +11,7 @@ export default function BooksPage() {
   const [books,     setBooks]     = useState([]);
   const [search,    setSearch]    = useState("");
   const [available, setAvailable] = useState("");
+  const [isbnStatus, setIsbnStatus] = useState("");
   const [error,     setError]     = useState("");
   const [locationPicker, setLocationPicker] = useState({
     open: false,
@@ -89,6 +90,16 @@ export default function BooksPage() {
       .join(", ");
   };
 
+  const filteredBooks = books.filter((book) => {
+    if (isbnStatus === "unknown") {
+      return !(book.isbn || "").trim();
+    }
+    if (isbnStatus === "known") {
+      return !!(book.isbn || "").trim();
+    }
+    return true;
+  });
+
   return (
     <div>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"0.5rem" }}>
@@ -108,9 +119,15 @@ export default function BooksPage() {
           <option value="true">Available Only</option>
           <option value="false">Checked Out</option>
         </select>
+        <select style={styles.select} value={isbnStatus}
+          onChange={e => setIsbnStatus(e.target.value)}>
+          <option value="">All ISBN</option>
+          <option value="known">Known ISBN</option>
+          <option value="unknown">Unknown ISBN</option>
+        </select>
         <button style={styles.btn} type="submit">Search</button>
         <button style={styles.btnOutline} type="button" onClick={() => {
-          setSearch(""); setAvailable(""); setTimeout(fetchBooks, 0);
+          setSearch(""); setAvailable(""); setIsbnStatus(""); setTimeout(fetchBooks, 0);
         }}>Clear</button>
       </form>
 
@@ -119,10 +136,10 @@ export default function BooksPage() {
       {/* Books Table / Cards */}
       {isPhone ? (
         <div style={styles.mobileList}>
-          {books.length === 0 && (
+          {filteredBooks.length === 0 && (
             <div style={styles.mobileEmpty}>No books found.</div>
           )}
-          {books.map((book) => {
+          {filteredBooks.map((book) => {
             const inCart = cartQty(book.id);
             const maxed = inCart >= book.available_copies;
             return (
@@ -175,12 +192,12 @@ export default function BooksPage() {
             </tr>
           </thead>
           <tbody>
-            {books.length === 0 && (
+            {filteredBooks.length === 0 && (
               <tr><td colSpan={6} style={{textAlign:"center",padding:"1rem",color:"#888"}}>
                 No books found.
               </td></tr>
             )}
-            {books.map(book => {
+            {filteredBooks.map(book => {
               const inCart = cartQty(book.id);
               const maxed  = inCart >= book.available_copies;
               return (
