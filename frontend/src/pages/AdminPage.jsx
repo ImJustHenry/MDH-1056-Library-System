@@ -15,6 +15,7 @@ export default function AdminPage() {
 
   // Add book form
   const [form, setForm] = useState({ title:"", author:"", isbn:"", total_copies:1, location_code:"A1" });
+  const [isIsbnUnknown, setIsIsbnUnknown] = useState(false);
   const isPhone = useViewportMatch(820);
   const [showScanner, setShowScanner] = useState(false);
   const [scannerError, setScannerError] = useState("");
@@ -32,6 +33,7 @@ export default function AdminPage() {
   // Edit book modal
   const [editingBook,  setEditingBook]  = useState(null);
   const [editForm,     setEditForm]     = useState({});
+  const [isEditIsbnUnknown, setIsEditIsbnUnknown] = useState(false);
   const [editLocationMode, setEditLocationMode] = useState("single");
   const [editLocationRows, setEditLocationRows] = useState([]);
 
@@ -560,9 +562,14 @@ export default function AdminPage() {
   const handleAddBook = async (e) => {
     e.preventDefault(); setError(""); setMsg("");
     try {
-      await api.post("/books", { ...form, total_copies: Number(form.total_copies) });
+      await api.post("/books", {
+        ...form,
+        isbn: isIsbnUnknown ? "" : form.isbn,
+        total_copies: Number(form.total_copies),
+      });
       setMsg("Book added successfully.");
       setForm({ title:"", author:"", isbn:"", total_copies:1, location_code:"A1" });
+      setIsIsbnUnknown(false);
       fetchBooks();
     } catch (err) {
       if (err.response?.status === 409 && /isbn/i.test(err.response?.data?.error || "")) {
@@ -589,6 +596,7 @@ export default function AdminPage() {
       location_code: fallbackCode,
       description: book.description || "",
     });
+    setIsEditIsbnUnknown(!(book.isbn || "").trim());
     setEditLocationMode(counts.length > 1 ? "multi" : "single");
     setEditLocationRows(
       counts.length > 0
@@ -625,7 +633,7 @@ export default function AdminPage() {
     const payload = {
         title: editForm.title,
         author: editForm.author,
-        isbn: editForm.isbn,
+        isbn: isEditIsbnUnknown ? "" : editForm.isbn,
         total_copies: nextTotal,
         location_code: editForm.location_code,
         description: editForm.description,
@@ -783,12 +791,33 @@ export default function AdminPage() {
         <>
           <h3>Add Book</h3>
           <form onSubmit={handleAddBook} style={styles.form}>
-            {[["Title","title","text",true],["Author","author","text",true],
-              ["ISBN","isbn","text",false]].map(([label,key,type,req]) => (
+            {[["Title","title","text",true],["Author","author","text",true]].map(([label,key,type,req]) => (
               <input key={key} style={styles.input} type={type} placeholder={label}
                 value={form[key]} required={req}
                 onChange={e => setForm(f => ({...f, [key]: e.target.value}))} />
             ))}
+            <input
+              style={styles.input}
+              type="text"
+              placeholder="ISBN"
+              value={form.isbn}
+              disabled={isIsbnUnknown}
+              onChange={e => setForm(f => ({ ...f, isbn: e.target.value }))}
+            />
+            <label style={styles.checkboxLabel}>
+              <input
+                type="checkbox"
+                checked={isIsbnUnknown}
+                onChange={e => {
+                  const checked = e.target.checked;
+                  setIsIsbnUnknown(checked);
+                  if (checked) {
+                    setForm(f => ({ ...f, isbn: "" }));
+                  }
+                }}
+              />
+              Unknown ISBN
+            </label>
             <input style={{...styles.input, width:"120px"}} type="number" min="1"
               placeholder="Copies" value={form.total_copies}
               onChange={e => setForm(f => ({...f, total_copies: e.target.value}))} />
@@ -1011,7 +1040,22 @@ export default function AdminPage() {
               <div>
                 <label style={styles.label}>ISBN</label>
                 <input style={styles.modalInput} type="text" value={editForm.isbn}
+                  disabled={isEditIsbnUnknown}
                   onChange={e => setEditForm({...editForm, isbn: e.target.value})} />
+                <label style={{ ...styles.checkboxLabel, marginTop:"0.35rem" }}>
+                  <input
+                    type="checkbox"
+                    checked={isEditIsbnUnknown}
+                    onChange={e => {
+                      const checked = e.target.checked;
+                      setIsEditIsbnUnknown(checked);
+                      if (checked) {
+                        setEditForm(prev => ({ ...prev, isbn: "" }));
+                      }
+                    }}
+                  />
+                  Unknown ISBN
+                </label>
               </div>
               <div>
                 <label style={styles.label}>Total Copies</label>
@@ -1282,6 +1326,7 @@ const styles = {
   btnDanger: { padding:"0.35rem 0.75rem", background:"#c00", color:"#fff",
                border:"none", borderRadius:"4px", cursor:"pointer", fontSize:"0.85rem" },
   rowActions: { display:"flex", gap:"0.45rem", justifyContent:"flex-end" },
+  checkboxLabel: { display:"inline-flex", alignItems:"center", gap:"0.4rem", fontSize:"0.85rem", color:"#374151", whiteSpace:"nowrap" },
   label: { display:"block", marginBottom:"0.25rem", fontWeight:"600", fontSize:"0.9rem", color:"#333" },
   modalOverlay: { position:"fixed", top:0, left:0, right:0, bottom:0, background:"rgba(0,0,0,0.5)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:1000 },
   modalContent: { background:"#fff", borderRadius:"10px", padding:"2rem", maxWidth:"600px", width:"90vw", maxHeight:"90vh", overflowY:"auto", boxShadow:"0 20px 60px rgba(0,0,0,0.3)" },

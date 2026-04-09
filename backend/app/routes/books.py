@@ -165,8 +165,6 @@ def add_book():
     doc = {
         "title":            title,
         "author":           author,
-        "isbn":             isbn,
-        "isbn_normalized":  isbn_normalized,
         "location_code":    location_code,
         "location_counts":  location_counts,
         "description":      data.get("description", "").strip(),
@@ -175,6 +173,9 @@ def add_book():
         "created_at":       now,
         "updated_at":       now,
     }
+    if isbn_normalized:
+        doc["isbn"] = isbn
+        doc["isbn_normalized"] = isbn_normalized
     result = db.books.insert_one(doc)
 
     # ── Log the action ────────────────────────────────────────────────────
@@ -221,6 +222,8 @@ def edit_book(book_id):
         updates["available_copies"] = max(0, new_total - checked_out)
         updates["total_copies"]     = new_total
 
+    unset_fields = {}
+
     if "isbn" in updates:
         raw_isbn = (updates.get("isbn") or "").strip()
         normalized_isbn = _normalize_isbn(raw_isbn)
@@ -238,8 +241,13 @@ def edit_book(book_id):
             })
             if duplicate:
                 return jsonify({"error": "There is duplicate ISBN."}), 409
-        updates["isbn"] = raw_isbn
-        updates["isbn_normalized"] = normalized_isbn
+            updates["isbn"] = raw_isbn
+            updates["isbn_normalized"] = normalized_isbn
+        else:
+            updates.pop("isbn", None)
+            updates.pop("isbn_normalized", None)
+            unset_fields["isbn"] = ""
+            unset_fields["isbn_normalized"] = ""
 
     if "location_counts" in updates:
         normalized_counts = _normalize_location_counts(updates["location_counts"])
@@ -257,7 +265,10 @@ def edit_book(book_id):
         updates["location_counts"] = _rebalance_location_counts(existing_counts, target_available, fallback_location)
 
     updates["updated_at"] = datetime.datetime.utcnow()
-    db.books.update_one({"_id": oid}, {"$set": updates})
+    write_ops = {"$set": updates}
+    if unset_fields:
+        write_ops["$unset"] = unset_fields
+    db.books.update_one({"_id": oid}, write_ops)
 
     updated = db.books.find_one({"_id": oid})
     return jsonify(_serialize(updated)), 200
