@@ -104,9 +104,12 @@ export default function BooksPage() {
     <div>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"0.5rem" }}>
         <h2 style={{ margin:0 }}>Book Catalog</h2>
-        <button style={styles.cartBtn} onClick={() => navigate("/cart")}>
-          🛒 Cart{totalItems > 0 && <span style={styles.badge}>{totalItems}</span>}
-        </button>
+        <div style={{ display:"flex", gap:"0.5rem", alignItems:"center" }}>
+          <button style={styles.scanBtn} onClick={() => navigate("/barcode")}>Scan Barcode</button>
+          <button style={styles.cartBtn} onClick={() => navigate("/cart") }>
+            🛒 Cart{totalItems > 0 && <span style={styles.badge}>{totalItems}</span>}
+          </button>
+        </div>
       </div>
 
       {/* Search + Filter */}
@@ -294,6 +297,8 @@ const styles = {
   cartBtn:     { display:"flex", alignItems:"center", gap:"0.4rem", padding:"0.45rem 1rem",
                  background:"#003087", color:"#fff", border:"none", borderRadius:4,
                  cursor:"pointer", fontWeight:"600", fontSize:"0.95rem", position:"relative" },
+  scanBtn:     { padding:"0.45rem 0.9rem", background:"#fff", color:"#003087", border:"1px solid #003087",
+                 borderRadius:4, cursor:"pointer", fontWeight:"600", fontSize:"0.92rem" },
   badge:       { background:"#e53", color:"#fff", borderRadius:"50%", width:20, height:20,
                  display:"inline-flex", alignItems:"center", justifyContent:"center",
                  fontSize:"0.75rem", fontWeight:"bold", marginLeft:2 },

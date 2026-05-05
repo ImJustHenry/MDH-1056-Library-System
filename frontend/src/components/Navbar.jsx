@@ -49,7 +49,6 @@ export default function Navbar() {
                 {user ? (
                   <>
                     <Link to="/books"     style={s.mobileLink}>Catalog</Link>
-                    <Link to="/barcode"   style={s.mobileLink}>Scan</Link>
                     <Link to="/checkouts" style={s.mobileLink}>My Checkouts</Link>
                     {user.role === "admin" && (
                       <>
@@ -75,7 +74,6 @@ export default function Navbar() {
             {user && (
               <nav style={s.nav}>
                 <Link to="/books"     style={lnk("/books")}>Catalog</Link>
-                <Link to="/barcode"   style={lnk("/barcode")}>Scan</Link>
                 <Link to="/cart"      style={{ ...lnk("/cart"), position:"relative" }}>
                   Cart {totalItems > 0 && <span style={s.badge}>{totalItems}</span>}
                 </Link>
