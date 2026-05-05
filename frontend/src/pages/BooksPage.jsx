@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../api/client";
 import { useCart } from "../context/CartContext";
@@ -19,6 +19,22 @@ export default function BooksPage() {
     options: [],
     selected: "",
   });
+  const [showScanner, setShowScanner] = useState(false);
+  const [scannerError, setScannerError] = useState("");
+  const [scannerMessage, setScannerMessage] = useState("");
+  const [scannerLocationModal, setScannerLocationModal] = useState({
+    open: false,
+    book: null,
+    options: [],
+    defaultLocation: "A1",
+  });
+  const [scannerSelectedLocation, setScannerSelectedLocation] = useState("");
+
+  const scannerVideoRef = useRef(null);
+  const scannerStreamRef = useRef(null);
+  const scannerRafRef = useRef(null);
+  const scannerDetectorRef = useRef(null);
+  const scannerLockRef = useRef(false);
 
   const fetchBooks = async () => {
     const params = {};
@@ -80,6 +96,239 @@ export default function BooksPage() {
     setLocationPicker({ open: false, book: null, options: [], selected: "" });
   };
 
+  const normalizeIsbn = (value) => (value || "").replace(/[^0-9Xx]/g, "").toUpperCase();
+
+  const isValidEan13 = (code) => {
+    if (!/^\d{13}$/.test(code)) return false;
+    const digits = code.split("").map(Number);
+    const checksum = digits
+      .slice(0, 12)
+      .reduce((sum, digit, index) => sum + digit * (index % 2 === 0 ? 1 : 3), 0);
+    const checkDigit = (10 - (checksum % 10)) % 10;
+    return checkDigit === digits[12];
+  };
+
+  const isValidIsbn10 = (code) => {
+    if (!/^\d{9}[\dX]$/.test(code)) return false;
+    const digits = code.split("");
+    const checksum = digits
+      .slice(0, 9)
+      .reduce((sum, char, index) => sum + Number(char) * (10 - index), 0);
+    const last = digits[9] === "X" ? 10 : Number(digits[9]);
+    return (checksum + last) % 11 === 0;
+  };
+
+  const isbn10To13 = (isbn10) => {
+    const base = `978${isbn10.slice(0, 9)}`;
+    const checksum = base
+      .split("")
+      .map(Number)
+      .reduce((sum, digit, index) => sum + digit * (index % 2 === 0 ? 1 : 3), 0);
+    const checkDigit = (10 - (checksum % 10)) % 10;
+    return `${base}${checkDigit}`;
+  };
+
+  const isbn13To10 = (isbn13) => {
+    if (!/^978\d{10}$/.test(isbn13) || !isValidEan13(isbn13)) return "";
+    const body = isbn13.slice(3, 12);
+    const sum = body
+      .split("")
+      .map(Number)
+      .reduce((acc, digit, index) => acc + digit * (10 - index), 0);
+    const checkValue = (11 - (sum % 11)) % 11;
+    const checkDigit = checkValue === 10 ? "X" : String(checkValue);
+    return `${body}${checkDigit}`;
+  };
+
+  const getIsbnVariants = (rawCode) => {
+    const code = normalizeIsbn(rawCode);
+    if (!code) return [];
+    const variants = new Set([code]);
+    if (code.length === 10 && isValidIsbn10(code)) variants.add(isbn10To13(code));
+    if (code.length === 13 && /^97[89]/.test(code) && isValidEan13(code)) {
+      if (code.startsWith("978")) {
+        const isbn10 = isbn13To10(code);
+        if (isbn10) variants.add(isbn10);
+      }
+    }
+    return Array.from(variants);
+  };
+
+  const findExistingBookByIsbn = async (isbn) => {
+    const variants = getIsbnVariants(isbn);
+    if (!variants.length) return null;
+    const localMatch = books.find((book) => variants.includes(normalizeIsbn(book.isbn)));
+    if (localMatch) return localMatch;
+    try {
+      const { data } = await api.get("/books");
+      return data.find((book) => variants.includes(normalizeIsbn(book.isbn))) || null;
+    } catch {
+      return null;
+    }
+  };
+
+  const stopScanner = () => {
+    if (scannerRafRef.current) {
+      cancelAnimationFrame(scannerRafRef.current);
+      scannerRafRef.current = null;
+    }
+    if (scannerStreamRef.current) {
+      scannerStreamRef.current.getTracks().forEach((track) => track.stop());
+      scannerStreamRef.current = null;
+    }
+    if (scannerVideoRef.current) {
+      scannerVideoRef.current.srcObject = null;
+    }
+    scannerLockRef.current = false;
+  };
+
+  const closeScannerLocationModal = () => {
+    setScannerLocationModal({ open: false, book: null, options: [], defaultLocation: "A1" });
+    setScannerSelectedLocation("");
+    setScannerMessage("Scan skipped.");
+  };
+
+  const confirmScannerLocation = () => {
+    const book = scannerLocationModal.book;
+    if (!book) return;
+    const code = String(scannerSelectedLocation || scannerLocationModal.defaultLocation || "A1").trim().toUpperCase();
+    if (scannerLocationModal.options.length && !scannerLocationModal.options.includes(code)) {
+      setScannerError("Invalid location selected.");
+      return;
+    }
+    addToCart(book, code);
+    setScannerMessage(`Added "${book.title}" → ${code} to cart.`);
+    setScannerLocationModal({ open: false, book: null, options: [], defaultLocation: "A1" });
+    setScannerSelectedLocation("");
+  };
+
+  const handleScannerDetected = async (rawValue) => {
+    const barcode = normalizeIsbn(rawValue);
+    if (!barcode) return;
+    setError("");
+    setMsg("");
+    setScannerError("");
+    setScannerMessage("");
+    stopScanner();
+    setShowScanner(false);
+
+    const existing = await findExistingBookByIsbn(barcode);
+    if (!existing) {
+      setScannerError("Invalid barcode, please search for the book.");
+      return;
+    }
+
+    const counts = existing.location_counts || {};
+    const options = Object.entries(counts)
+      .filter(([, count]) => Number(count) > 0)
+      .map(([code]) => code);
+    const defaultLocation = options[0] || existing.location_code || "A1";
+
+    setScannerLocationModal({
+      open: true,
+      book: existing,
+      options: options.length ? options : [defaultLocation],
+      defaultLocation,
+    });
+    setScannerSelectedLocation(defaultLocation);
+  };
+
+  const startScanner = async () => {
+    setScannerError("");
+    setScannerMessage("");
+
+    if (!("mediaDevices" in navigator) || !("getUserMedia" in navigator.mediaDevices)) {
+      setScannerError("Camera is not available on this device/browser.");
+      return;
+    }
+
+    try {
+      if ("BarcodeDetector" in window) {
+        const formats = ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "code_39", "itf"];
+        scannerDetectorRef.current = new window.BarcodeDetector({ formats });
+
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+          audio: false,
+        });
+
+        scannerStreamRef.current = stream;
+        if (scannerVideoRef.current) {
+          scannerVideoRef.current.srcObject = stream;
+          await scannerVideoRef.current.play();
+        }
+
+        const tick = async () => {
+          if (!showScanner || !scannerVideoRef.current || !scannerDetectorRef.current) return;
+
+          try {
+            if (!scannerLockRef.current) {
+              const detected = await scannerDetectorRef.current.detect(scannerVideoRef.current);
+              if (detected?.length) {
+                const cleaned = normalizeIsbn(detected[0]?.rawValue || "");
+                if (cleaned.length >= 8) {
+                  scannerLockRef.current = true;
+                  await handleScannerDetected(cleaned);
+                  return;
+                }
+              }
+            }
+          } catch {
+            // Ignore per-frame detection errors.
+          }
+
+          scannerRafRef.current = requestAnimationFrame(tick);
+        };
+
+        scannerRafRef.current = requestAnimationFrame(tick);
+        return;
+      }
+
+      if (!scannerVideoRef.current) {
+        setScannerError("Scanner preview failed to initialize.");
+        return;
+      }
+
+      const { BrowserMultiFormatReader } = await import("@zxing/browser");
+      const reader = new BrowserMultiFormatReader();
+      const controls = await reader.decodeFromConstraints(
+        {
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+        },
+        scannerVideoRef.current,
+        async (result) => {
+          if (scannerLockRef.current) return;
+          const cleaned = normalizeIsbn(result?.getText?.() || "");
+          if (cleaned.length >= 8) {
+            scannerLockRef.current = true;
+            await handleScannerDetected(cleaned);
+          }
+        }
+      );
+
+      if (controls?.stop) {
+        scannerDetectorRef.current = null;
+      }
+    } catch (err) {
+      setScannerError(err?.message || "Unable to start camera scanner.");
+      stopScanner();
+    }
+  };
+
+  useEffect(() => {
+    if (showScanner) startScanner();
+    else stopScanner();
+    return () => stopScanner();
+  }, [showScanner]);
+
   const locationSummary = (book) => {
     const counts = book.location_counts || {};
     const entries = Object.entries(counts).filter(([, count]) => Number(count) > 0);
@@ -105,7 +354,9 @@ export default function BooksPage() {
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"0.5rem" }}>
         <h2 style={{ margin:0 }}>Book Catalog</h2>
         <div style={{ display:"flex", gap:"0.5rem", alignItems:"center" }}>
-          <button style={styles.scanBtn} onClick={() => navigate("/barcode")}>Scan Barcode</button>
+          <button style={styles.scanBtn} onClick={() => setShowScanner((prev) => !prev)}>
+            {showScanner ? "Hide Scanner" : "Scan Barcode"}
+          </button>
           <button style={styles.cartBtn} onClick={() => navigate("/cart") }>
             🛒 Cart{totalItems > 0 && <span style={styles.badge}>{totalItems}</span>}
           </button>
@@ -135,6 +386,25 @@ export default function BooksPage() {
       </form>
 
       {error && <p style={styles.error}>{error}</p>}
+      {scannerMessage && <p style={styles.success}>{scannerMessage}</p>}
+      {scannerError && <p style={styles.error}>{scannerError}</p>}
+
+      {showScanner && (
+        <div style={styles.scannerPanel}>
+          <div style={styles.scannerHeader}>
+            <div>
+              <h3 style={{ margin: 0 }}>Barcode Scanner</h3>
+              <p style={{ margin: "0.25rem 0 0", color: "#64748b", fontSize: "0.92rem" }}>
+                Scan a book barcode to add it to your cart.
+              </p>
+            </div>
+            <button style={styles.btnOutline} type="button" onClick={() => setShowScanner(false)}>
+              Close
+            </button>
+          </div>
+          <video ref={scannerVideoRef} style={styles.scannerVideo} playsInline muted />
+        </div>
+      )}
 
       {/* Books Table / Cards */}
       {isPhone ? (
@@ -265,6 +535,30 @@ export default function BooksPage() {
           </div>
         </div>
       )}
+
+      {scannerLocationModal.open && (
+        <div style={styles.pickerOverlay} onClick={closeScannerLocationModal}>
+          <div style={styles.pickerCard} onClick={(event) => event.stopPropagation()}>
+            <h4 style={{ margin: "0 0 0.5rem" }}>Select Pickup Location</h4>
+            <p style={{ margin: "0 0 0.7rem", color: "#555", fontSize: "0.9rem" }}>
+              {scannerLocationModal.book?.title}
+            </p>
+            <select
+              style={styles.select}
+              value={scannerSelectedLocation}
+              onChange={(event) => setScannerSelectedLocation(event.target.value)}
+            >
+              {scannerLocationModal.options.map((code) => (
+                <option key={code} value={code}>{code}</option>
+              ))}
+            </select>
+            <div style={styles.pickerActions}>
+              <button style={styles.btnOutline} type="button" onClick={closeScannerLocationModal}>Cancel</button>
+              <button style={styles.btn} type="button" onClick={confirmScannerLocation}>Add to Cart</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -299,9 +593,14 @@ const styles = {
                  cursor:"pointer", fontWeight:"600", fontSize:"0.95rem", position:"relative" },
   scanBtn:     { padding:"0.45rem 0.9rem", background:"#fff", color:"#003087", border:"1px solid #003087",
                  borderRadius:4, cursor:"pointer", fontWeight:"600", fontSize:"0.92rem" },
+  scannerPanel: { border:"1px solid #dbe4f0", borderRadius:10, background:"#fff", padding:"0.9rem", marginBottom:"1rem", boxShadow:"0 8px 20px rgba(15,23,42,0.06)" },
+  scannerHeader: { display:"flex", justifyContent:"space-between", gap:"1rem", alignItems:"flex-start", marginBottom:"0.75rem" },
+  scannerVideo: { width:"100%", maxWidth:680, aspectRatio:"16 / 9", background:"#0f172a", borderRadius:10, objectFit:"cover" },
   badge:       { background:"#e53", color:"#fff", borderRadius:"50%", width:20, height:20,
                  display:"inline-flex", alignItems:"center", justifyContent:"center",
                  fontSize:"0.75rem", fontWeight:"bold", marginLeft:2 },
+    success:     { background:"#eaffea", color:"#080", padding:"0.6rem",
+                   borderRadius:"4px", marginBottom:"0.5rem" },
   table:   { width:"100%", borderCollapse:"collapse" },
   header:  { background:"#f0f4f8", textAlign:"left" },
   row:     { borderBottom:"1px solid #eee" },

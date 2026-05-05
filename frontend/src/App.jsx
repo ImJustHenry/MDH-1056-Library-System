@@ -14,7 +14,6 @@ import CartPage           from "./pages/CartPage";
 import CheckoutsPage      from "./pages/CheckoutsPage";
 import AdminPage          from "./pages/AdminPage";
 import DashboardPage      from "./pages/DashboardPage";
-import BarcodePage        from "./pages/BarcodePage";
 
 export default function App() {
   return (
@@ -34,7 +33,6 @@ export default function App() {
               {/* User + Admin */}
               <Route element={<ProtectedRoute />}>
                 <Route path="/books"     element={<BooksPage />} />
-                <Route path="/barcode"   element={<BarcodePage />} />
                 <Route path="/cart"      element={<CartPage />} />
                 <Route path="/checkouts" element={<CheckoutsPage />} />
               </Route>
