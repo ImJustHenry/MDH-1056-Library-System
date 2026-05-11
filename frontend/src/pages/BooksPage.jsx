@@ -34,6 +34,7 @@ export default function BooksPage() {
   const scannerStreamRef = useRef(null);
   const scannerRafRef = useRef(null);
   const scannerDetectorRef = useRef(null);
+  const scannerControlsRef = useRef(null);
   const scannerLockRef = useRef(false);
 
   const fetchBooks = async () => {
@@ -172,6 +173,10 @@ export default function BooksPage() {
       cancelAnimationFrame(scannerRafRef.current);
       scannerRafRef.current = null;
     }
+    if (scannerControlsRef.current?.stop) {
+      scannerControlsRef.current.stop();
+      scannerControlsRef.current = null;
+    }
     if (scannerStreamRef.current) {
       scannerStreamRef.current.getTracks().forEach((track) => track.stop());
       scannerStreamRef.current = null;
@@ -237,6 +242,11 @@ export default function BooksPage() {
     setScannerError("");
     setScannerMessage("");
 
+    if (!window.isSecureContext) {
+      setScannerError("Camera scanning requires HTTPS or localhost.");
+      return;
+    }
+
     if (!("mediaDevices" in navigator) || !("getUserMedia" in navigator.mediaDevices)) {
       setScannerError("Camera is not available on this device/browser.");
       return;
@@ -295,7 +305,7 @@ export default function BooksPage() {
 
       const { BrowserMultiFormatReader } = await import("@zxing/browser");
       const reader = new BrowserMultiFormatReader();
-      const controls = await reader.decodeFromConstraints(
+      scannerControlsRef.current = await reader.decodeFromConstraints(
         {
           video: {
             facingMode: { ideal: "environment" },
@@ -313,10 +323,6 @@ export default function BooksPage() {
           }
         }
       );
-
-      if (controls?.stop) {
-        scannerDetectorRef.current = null;
-      }
     } catch (err) {
       setScannerError(err?.message || "Unable to start camera scanner.");
       stopScanner();
