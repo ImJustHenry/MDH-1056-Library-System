@@ -211,7 +211,6 @@ export default function BooksPage() {
     const barcode = normalizeIsbn(rawValue);
     if (!barcode) return;
     setError("");
-    setMsg("");
     setScannerError("");
     setScannerMessage("");
     stopScanner();
