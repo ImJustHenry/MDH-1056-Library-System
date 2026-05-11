@@ -408,7 +408,7 @@ export default function BooksPage() {
               Close
             </button>
           </div>
-          <video ref={scannerVideoRef} style={styles.scannerVideo} playsInline muted />
+          <video ref={scannerVideoRef} style={styles.scannerVideo} playsInline muted autoPlay />
         </div>
       )}
 
